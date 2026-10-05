@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Dark window from the very first frame, so launching never flashes white. -->
+    <style name="Theme.NFCAttendance" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/brand_background</item>
+        <item name="android:colorBackground">@color/brand_background</item>
+    </style>
+</resources>

@@ -1,0 +1,276 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Fluid UI Improvement Plan - NFC Attendance Checker",
+    "output": "docs/UI-IMPROVEMENT-PLAN.html",
+    "animation": "trace",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "p0",
+        "label": "P0 foundations",
+        "focus": [
+          "audit",
+          "tokens",
+          "contrast"
+        ],
+        "note": "Two token edits remove the worst measured defect before any layout work."
+      },
+      {
+        "id": "p1",
+        "label": "P1 structure",
+        "focus": [
+          "shell",
+          "screens",
+          "states"
+        ],
+        "note": "Identity that survives scrolling, one section instead of two, actions above the lists."
+      },
+      {
+        "id": "p2",
+        "label": "P2 motion",
+        "focus": [
+          "motion",
+          "feedback",
+          "verify"
+        ],
+        "note": "Motion only where state changes, then judged on the emulator against real states."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "evidence",
+      "label": "Evidence"
+    },
+    {
+      "id": "tokens",
+      "label": "Theme + Tokens"
+    },
+    {
+      "id": "structure",
+      "label": "Screen Structure"
+    },
+    {
+      "id": "motion",
+      "label": "Motion + Transitions"
+    },
+    {
+      "id": "verify",
+      "label": "Verification"
+    }
+  ],
+  "phases": [
+    {
+      "id": "ph0",
+      "label": "P0 Foundations",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "ph1",
+      "label": "P1 Structure",
+      "fromCol": 2,
+      "toCol": 3
+    },
+    {
+      "id": "ph2",
+      "label": "P2 Motion + Verify",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "dashed"
+    }
+  ],
+  "groups": [
+    {
+      "id": "feedback_language",
+      "label": "One feedback language",
+      "lane": "motion",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "emphasis"
+    }
+  ],
+  "mainPath": [
+    "audit",
+    "tokens",
+    "shell",
+    "screens",
+    "motion",
+    "feedback",
+    "verify"
+  ],
+  "nodes": [
+    {
+      "id": "audit",
+      "lane": "evidence",
+      "col": 0,
+      "type": "external",
+      "label": "UI/UX Audit",
+      "sublabel": "10 ranked findings",
+      "tag": "read-only"
+    },
+    {
+      "id": "tokens",
+      "lane": "tokens",
+      "col": 1,
+      "type": "frontend",
+      "label": "Token Pass",
+      "sublabel": "outline 3:1, 1 accent",
+      "tag": "1 commit"
+    },
+    {
+      "id": "shell",
+      "lane": "structure",
+      "col": 2,
+      "type": "frontend",
+      "label": "App Shell",
+      "sublabel": "persistent header",
+      "tag": "no nav lib"
+    },
+    {
+      "id": "screens",
+      "lane": "structure",
+      "col": 3,
+      "type": "frontend",
+      "label": "Screens",
+      "sublabel": "order + duplicates"
+    },
+    {
+      "id": "motion",
+      "lane": "motion",
+      "col": 4,
+      "type": "frontend",
+      "label": "Motion System",
+      "sublabel": "shared element",
+      "tag": "built-in APIs"
+    },
+    {
+      "id": "feedback",
+      "lane": "motion",
+      "col": 5,
+      "type": "frontend",
+      "label": "Feedback",
+      "sublabel": "press + crossfade",
+      "tag": "220 / 300 ms"
+    },
+    {
+      "id": "contrast",
+      "lane": "verify",
+      "col": 1,
+      "type": "security",
+      "label": "Contrast Check",
+      "sublabel": "computed, not guessed"
+    },
+    {
+      "id": "states",
+      "lane": "verify",
+      "col": 3,
+      "type": "security",
+      "label": "State Matrix",
+      "sublabel": "empty, dirty, 1.3x"
+    },
+    {
+      "id": "verify",
+      "lane": "verify",
+      "col": 5,
+      "type": "security",
+      "label": "Emulator Pass",
+      "sublabel": "4 tabs, 1.3x",
+      "tag": "blocking"
+    }
+  ],
+  "edges": [
+    {
+      "from": "audit",
+      "to": "tokens",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "tokens",
+      "to": "shell",
+      "variant": "emphasis",
+      "role": "main",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "shell",
+      "to": "screens",
+      "role": "main"
+    },
+    {
+      "from": "screens",
+      "to": "motion",
+      "role": "main"
+    },
+    {
+      "from": "motion",
+      "to": "feedback",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "feedback",
+      "to": "verify",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "tokens",
+      "to": "contrast",
+      "label": "recheck",
+      "role": "branch"
+    },
+    {
+      "from": "screens",
+      "to": "states",
+      "label": "cover",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Do First (P0)",
+      "items": [
+        "Raise every outline and switch boundary from 1.31:1 to at least 3:1",
+        "Make green mean the primary action, never absent-on-Report",
+        "Both are token edits in ui/theme/Color.kt - one small commit"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Structure Beats Decoration",
+      "items": [
+        "A persistent header so screen identity survives scrolling",
+        "One section on screen, not the same one twice",
+        "Export above the lists, not three swipes below them",
+        "Empty states carry an action, not a sentence"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Fluid, Not Decorated",
+      "items": [
+        "Motion only where state changes: 220 ms touch, 300 ms screen",
+        "Shared element for the section card, 30 ms stagger for roster rows",
+        "Every motion must survive animator_duration_scale 0"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Ground Rules",
+      "items": [
+        "No new Gradle dependency and no library version change",
+        "No navigation-compose, extended icons, Lottie or Coil",
+        "Every existing behaviour and unit test keeps passing",
+        "Final check is a real card tap on phone 1c23fb4f"
+      ]
+    }
+  ]
+}

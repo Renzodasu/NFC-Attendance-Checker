@@ -1,0 +1,102 @@
+# Publishing this repository on GitHub
+
+Everything below is copy-paste ready. The repository files themselves (README, LICENSE,
+.gitignore, the CI workflow, the guide and the screenshots) already live in this project.
+
+## 1. Create the repository
+
+Go to **https://github.com/new** and paste:
+
+| Field | Value |
+| --- | --- |
+| Repository name | `NFC-Attendance-Checker` |
+| Description | Offline Android app for class attendance: students tap a MIFARE ID card to join a section roster, then tap again to be marked present. Exports an absent-first .xlsx to the phone's Documents folder. No server, no accounts, NFC permission only. |
+| Visibility | Public (or Private) |
+| Initialize this repository with | **leave all three boxes unticked** - README, .gitignore and LICENSE already exist here |
+
+**Topics** (paste one at a time, or comma-separated):
+
+```text
+android, kotlin, jetpack-compose, nfc, mifare-classic, attendance-tracker, offline-first, xlsx, material3, education
+```
+
+## 2. Push the project
+
+```powershell
+cd C:\Users\Administrator\AndroidStudioProjects\NFCAttendance
+
+git init
+git add .
+git commit -m "NFC Attendance Checker 1.0 - offline card-tap attendance with Excel export/import"
+git branch -M main
+git remote add origin https://github.com/<your-account>/NFC-Attendance-Checker.git
+git push -u origin main
+```
+
+Two things that bite people here:
+
+- **Keep the wrapper executable.** On Windows the `gradlew` exec bit is often lost, and CI then
+  fails with `Permission denied`. Fix it once with
+  `git update-index --chmod=+x gradlew && git commit -m "Make gradlew executable"`.
+- **First run only:** `git config --global user.name "Your Name"` and
+  `git config --global user.email "you@example.com"`.
+
+## 3. Fill in the About panel
+
+On the repository page, press the cog next to **About**:
+
+- **Description** - the same sentence as above.
+- **Topics** - the list above.
+- **Website** - leave empty.
+- Tick **Releases** and **Packages** only if you publish them.
+
+## 4. Cut the first release
+
+1. Build the APK: `./gradlew :app:assembleDebug` (or `.\gradlew.bat` on Windows).
+2. On GitHub: **Releases → Draft a new release**.
+3. Tag: `v1.0` - Title: `NFC Attendance Checker 1.0`.
+4. Attach `app/build/outputs/apk/debug/NFC-Attendance-Checker-1.0-debug.apk`.
+5. Paste these release notes:
+
+```markdown
+First public build.
+
+- Four tabs: Sections, Register, Scan, Report.
+- Students register themselves by tapping an ID card; the same card tapped again updates its name
+  instead of adding a duplicate row.
+- Attendance sessions with 3-second duplicate suppression and a live present / absent / unmatched
+  strip above the navigation bar.
+- Exports .xlsx into Documents/NFC Attendance:
+  - roster: section name, date updated, and Name | UID rows;
+  - session: Absent, Present, Unmatched, in that order, absent list first.
+- Imports a workbook a classmate exported and merges by card UID: nothing is deleted, a card never
+  appears twice, and the later of the two dates wins.
+- Dark Material 3 interface, no storage permission, no internet permission.
+- Requires Android 7.0 (API 24) or newer and an NFC reader.
+
+APK: NFC-Attendance-Checker-1.0-debug.apk (debug-signed - fine for classroom use, not for the Play Store).
+```
+
+## 5. What is in the repository
+
+```text
+README.md                                  project front page (what it does, install, build, tests)
+LICENSE                                    MIT
+.gitignore                                 Android/Gradle/IDE noise + signing material
+.github/workflows/android.yml              CI: assembleDebug + testDebugUnitTest, uploads the APK
+docs/GITHUB-PUBLISH.md                     this file
+docs/NFC-Attendance-Checker-Guide.html     the illustrated how-to-use guide (self-contained)
+docs/NFC-Attendance-Checker-Guide.png      the same guide as an image
+docs/screenshots/*.png                     the images the README shows
+app/                                       the Android app
+```
+
+## 6. Optional next steps
+
+- **CI:** the workflow runs on `ubuntu-latest` with JDK 21. If Gradle reports a missing
+  `platforms;android-37`, add a step that runs
+  `sdkmanager --install "platforms;android-37"` before the build.
+- **Branch protection:** Settings → Branches → require the *Build and unit-test* check before merge.
+- **Release signing:** generate a keystore, keep it out of git (already ignored), and add the
+  `signingConfigs` block plus GitHub secrets when you want a release build.
+- **Issues:** Settings → Features → Issues gives you a tracker with zero setup.

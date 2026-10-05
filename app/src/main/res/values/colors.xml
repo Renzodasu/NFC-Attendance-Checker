@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand palette: one place to change the look. -->
+    <color name="brand_background">#FF121212</color>
+    <color name="brand_surface">#FF181818</color>
+    <color name="brand_surface_raised">#FF1F1F1F</color>
+    <color name="brand_primary">#FF22C55E</color>
+    <color name="brand_primary_pressed">#FF16A34A</color>
+    <color name="brand_on_primary">#FF06210F</color>
+</resources>

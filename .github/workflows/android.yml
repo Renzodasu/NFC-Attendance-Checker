@@ -1,0 +1,38 @@
+name: Android CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build and unit-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # The hosted runner ships an Android SDK, but not always the exact
+      # compileSdk this project uses. If Gradle reports a missing platform,
+      # add: sdkmanager "platforms;android-37"
+      - name: Build the debug APK and run the unit tests
+        run: ./gradlew --no-daemon --console=plain :app:assembleDebug :app:testDebugUnitTest
+
+      - name: Upload the debug APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NFC-Attendance-Checker-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
