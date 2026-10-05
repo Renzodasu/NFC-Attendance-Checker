@@ -1,4 +1,4 @@
-# 📡 Presencia NFC
+#  Presencia NFC - Offline Attendance Checker
 
 <img src="docs/screenshots/icon.png" width="140" alt="Presencia NFC: a tilted playing card with a tick and the near-field signal">
 
