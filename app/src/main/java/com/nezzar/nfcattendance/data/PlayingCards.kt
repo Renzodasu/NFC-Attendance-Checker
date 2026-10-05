@@ -11,11 +11,11 @@ object PlayingCards {
     val SUITS = listOf("\u2660", "\u2665", "\u2666", "\u2663")
     val RANKS = listOf("A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K")
 
+    /** The same four suits, spelled out, for the picker's symbol list. */
+    val SUIT_NAMES = listOf("Spades", "Hearts", "Diamonds", "Clubs")
+
     /** All 52 faces, rank then suit: "A♠" through "K♣". */
     val DECK: List<String> = SUITS.flatMap { suit -> RANKS.map { rank -> rank + suit } }
-
-    /** Hearts and diamonds print red; spades and clubs print in the text colour. */
-    fun isRed(card: String): Boolean = card.endsWith("\u2665") || card.endsWith("\u2666")
 
     /** Just the rank, for the corner of the card. */
     fun rank(card: String): String = card.dropLast(1)

@@ -26,27 +26,32 @@ object ReportBuilder {
     const val LABEL_REGISTERED_STUDENTS = "Registered students"
     const val NOT_RECORDED = "Not recorded"
 
-    /** "yyyy-MM-dd HH:mm", the same shape as the session report's start time. */
-    private const val DATE_PATTERN = "yyyy-MM-dd HH:mm"
+    /**
+     * "4 October 2026, 3:16 PM" - the month in words and a civilian clock. These
+     * stamps are read by people on a phone and in the sheet, so they are written
+     * the way they are said; the session id stays machine-shaped because it names
+     * the file.
+     */
+    private const val DATE_PATTERN = "d MMMM yyyy, h:mm a"
 
-    /** Date and time are separate columns in the sheets, so a spreadsheet can sort them. */
-    private const val DATE_ONLY = "yyyy-MM-dd"
-    private const val TIME_ONLY = "HH:mm:ss"
+    /** Date and time are separate columns in the sheets, so each reads on its own. */
+    private const val DATE_ONLY = "d MMMM yyyy"
+    private const val TIME_ONLY = "h:mm:ss a"
 
     fun dateUpdatedText(millis: Long): String {
         if (millis <= 0L) return NOT_RECORDED
         return SimpleDateFormat(DATE_PATTERN, Locale.US).format(Date(millis))
     }
 
-    /** "2026-10-04" */
+    /** "4 October 2026" */
     fun dateText(millis: Long): String = SimpleDateFormat(DATE_ONLY, Locale.US).format(Date(millis))
 
-    /** "07:42:15" - when a card was read. */
+    /** "3:16:45 PM" - when a card was read. */
     fun timeText(millis: Long): String = SimpleDateFormat(TIME_ONLY, Locale.US).format(Date(millis))
 
-    /** "2026-10-04 07:42:15" - the full stamp, for a session header. */
+    /** "4 October 2026, 3:16:45 PM" - the full stamp, for a session header. */
     fun stampText(millis: Long): String =
-        SimpleDateFormat("$DATE_ONLY $TIME_ONLY", Locale.US).format(Date(millis))
+        SimpleDateFormat("$DATE_ONLY, $TIME_ONLY", Locale.US).format(Date(millis))
 
     fun sheets(
         session: AttendanceSession,

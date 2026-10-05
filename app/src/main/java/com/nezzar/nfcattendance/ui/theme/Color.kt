@@ -6,10 +6,11 @@ import androidx.compose.ui.graphics.Color
  * The app's own palettes. One place to change the look.
  *
  * Dark (measured, WCAG relative luminance):
- *   BrandOutline       #6B6B6B  3.33:1 on #181818 cards, 3.52:1 on #121212
+ *   BrandOutline       #6B6B6B  3.33:1 on #181818 cards, 3.94:1 on #000000
  *   BrandHairline      #2E2E2E  1.31:1 - decorative dividers only
  *   BrandTextSecondary #B0B0B0  8.19:1
  *   BrandPrimary       #22C55E  7.79:1
+ *   BrandAmber         #EAB308  11.0:1 on #000000, 9.3:1 on #181818
  *
  * Light (measured on #FFFFFF cards / #FAFAFA page):
  *   LightOutline       #6B6B6B  5.33:1
@@ -19,7 +20,11 @@ import androidx.compose.ui.graphics.Color
  */
 
 // ------------------------------------------------------------------- dark
-val BrandBackground = Color(0xFF121212)
+/**
+ * Plain black. Nothing is painted behind the cards, so the page is the dark the
+ * deck sits on - and every text colour on it gains contrast.
+ */
+val BrandBackground = Color(0xFF000000)
 val BrandSurface = Color(0xFF181818)
 val BrandSurfaceRaised = Color(0xFF1F1F1F)
 val BrandSurfaceHigh = Color(0xFF262626)
@@ -27,6 +32,13 @@ val BrandSurfaceHigh = Color(0xFF262626)
 val BrandPrimary = Color(0xFF22C55E)
 val BrandPrimaryPressed = Color(0xFF16A34A)
 val BrandOnPrimary = Color(0xFF06210F)
+
+/**
+ * The reader light when the phone has NFC but the switch is off. Amber is the
+ * warning that is neither "working" green nor "absent" black: 11.0:1 on the
+ * black page, 9.3:1 on a #181818 card.
+ */
+val BrandAmber = Color(0xFFEAB308)
 
 val BrandTextPrimary = Color(0xFFF5F5F5)
 val BrandTextSecondary = Color(0xFFB0B0B0)
@@ -55,3 +67,6 @@ val LightTextSecondary = Color(0xFF575757)
 val LightOutline = Color(0xFF6B6B6B)
 val LightHairline = Color(0xFFE2E2E2)
 val LightError = Color(0xFFB3261E)
+
+/** The same light on a light page: dark enough to stay visible, 4.3:1 on white. */
+val LightAmber = Color(0xFFA16207)

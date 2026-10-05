@@ -79,13 +79,6 @@ const val MotionTouchMs = 220
 const val MotionScreenMs = 300
 const val MotionStaggerMs = 30
 
-/** Small uppercase grey heading that opens every block. */
-// A playing card is the same object in any lighting: ivory stock, black or red ink.
-val CardStock = Color(0xFFF7F2E7)
-val CardStockEdge = Color(0xFFDDD4C1)
-val CardBlackInk = Color(0xFF1B1A18)
-val CardRedInk = Color(0xFFB3261E)
-
 /**
  * The chosen section, drawn the way the current style draws a section: the card
  * face, or the corner of an engineering sheet. Small enough to sit in a pill.

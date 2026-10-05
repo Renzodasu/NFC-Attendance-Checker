@@ -15,6 +15,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.RepeatMode
@@ -29,7 +30,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -78,6 +78,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.nezzar.nfcattendance.R
 import com.nezzar.nfcattendance.data.DocumentsExport
@@ -90,9 +91,6 @@ import com.nezzar.nfcattendance.data.Student
 
 @Composable
 fun SectionsScreen(state: AppState) {
-    var renameDraft by remember { mutableStateOf("") }
-    var confirmDelete by remember { mutableStateOf(false) }
-    var managingSection by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     // Sections only: adding a class lives on its own page, reached from the button
     // beside the "Sections: n" label.
@@ -109,7 +107,7 @@ fun SectionsScreen(state: AppState) {
         item(key = "title") {
             CollapsingTitle(
                 title = "Class sections",
-                subtitle = "One roster per class. Register cards, then scan attendance.",
+                subtitle = "One roster per class. Register students, then scan attendance.",
                 listState = listState,
             )
         }
@@ -119,7 +117,7 @@ fun SectionsScreen(state: AppState) {
                 EmptyState(
                     icon = R.drawable.ic_add,
                     title = "No sections yet",
-                    body = "A section is one class roster. Create the first one and register its cards.",
+                    body = "A section is one class roster. Create the first one and register its students.",
                     actionLabel = "Create your first section",
                     onAction = { state.openNewSection() },
                 )
@@ -151,7 +149,9 @@ fun SectionsScreen(state: AppState) {
                     }
                 }
                 BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                    val cardWidth = 200.dp
+                    // The shelf's cards are the page, so they are dealt bigger than
+                    // the page hero below and take the room it would leave empty.
+                    val cardWidth = ShelfCardWidth
                     val side = ((maxWidth - cardWidth) / 2).coerceAtLeast(0.dp)
                     HorizontalPager(
                         state = pagerState,
@@ -163,8 +163,10 @@ fun SectionsScreen(state: AppState) {
                             pagerState.currentPageOffsetFraction)
                         val closeness = (1f - kotlin.math.abs(distance)).coerceIn(0f, 1f)
                         val scale = 0.84f + 0.16f * closeness
-                        Surface(
-                            color = Color.Transparent,
+                        // A plain Box, not a Surface: a Surface clips its content to
+                        // its own rectangle, and that cut the chosen card's glow off
+                        // at the card's edge.
+                        Box(
                             modifier = Modifier.graphicsLayer {
                                 scaleX = scale
                                 scaleY = scale
@@ -188,12 +190,22 @@ fun SectionsScreen(state: AppState) {
                             } else {
                                 Modifier
                             }
+                            // The chosen card is the way into its own page, where the
+                            // class is renamed, given a subject, or deleted.
+                            val onManage: () -> Unit = {
+                                state.selectSection(section.name)
+                                state.openSection()
+                            }
                             if (state.visualStyle == VisualStyle.PLAIN) {
                                 PlainSectionCard(
                                     section = section,
                                     selected = selected,
                                     modifier = placed,
                                     onSelect = onSelect,
+                                    onManage = onManage,
+                                    glow = state.cardGlow,
+                                    cardWidth = ShelfCardWidth,
+                                    cardHeight = ShelfCardHeight,
                                 )
                             } else if (state.visualStyle == VisualStyle.SOLIDS) {
                                 SolidSectionCard(
@@ -202,6 +214,10 @@ fun SectionsScreen(state: AppState) {
                                     selected = selected,
                                     modifier = placed,
                                     onSelect = onSelect,
+                                    onManage = onManage,
+                                    glow = state.cardGlow,
+                                    cardWidth = ShelfCardWidth,
+                                    cardHeight = ShelfCardHeight,
                                 )
                             } else {
                                 SectionCard(
@@ -209,6 +225,10 @@ fun SectionsScreen(state: AppState) {
                                     selected = selected,
                                     modifier = placed,
                                     onSelect = onSelect,
+                                    onManage = onManage,
+                                    glow = state.cardGlow,
+                                    cardWidth = ShelfCardWidth,
+                                    cardHeight = ShelfCardHeight,
                                 )
                             }
                         }
@@ -218,27 +238,8 @@ fun SectionsScreen(state: AppState) {
         }
 
         if (selected != null) {
-            // One section on screen: the shelf card above already carries the name
-            // and the updated date, so the renaming and deleting controls stay folded
-            // away until somebody asks for them.
-            item(key = "manage") {
-                SelectedSectionCard(
-                    state = state,
-                    selected = selected,
-                    renameDraft = renameDraft,
-                    onRenameDraft = { renameDraft = it },
-                    confirmDelete = confirmDelete,
-                    onConfirmDelete = { confirmDelete = it },
-                    expanded = managingSection,
-                    onToggle = {
-                        managingSection = !managingSection
-                        confirmDelete = false
-                    },
-                )
-            }
-
-            // One button instead of a long inline roster: the list has its own page,
-            // which is also where a student is edited.
+            // One quiet row, not two cards: the list has its own page and that page
+            // carries the export, so there is no second button to explain up here.
             item(key = "roster-open") {
                 val rosterInteraction = remember { MutableInteractionSource() }
                 Surface(
@@ -250,21 +251,18 @@ fun SectionsScreen(state: AppState) {
                         .cardClick(rosterInteraction, onClick = { state.openRoster() }),
                 ) {
                     Row(
-                        modifier = Modifier.padding(16.dp),
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            SectionLabel("Registered students")
-                            Text(
-                                text = if (selected.students.isEmpty()) {
-                                    "Nobody registered yet"
-                                } else {
-                                    selected.students.size.toString() + " card(s) in " + selected.name
-                                },
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                            Note("Open the full list to edit a name, remove a card, or export it.")
-                        }
+                        Text(
+                            text = when (selected.students.size) {
+                                0 -> "No students registered yet"
+                                1 -> "1 student in " + selected.name
+                                else -> selected.students.size.toString() + " students in " + selected.name
+                            },
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.weight(1f),
+                        )
                         Icon(
                             painter = painterResource(R.drawable.ic_chevron),
                             contentDescription = "Open all registered students",
@@ -273,126 +271,27 @@ fun SectionsScreen(state: AppState) {
                     }
                 }
             }
-
-            item(key = "export") { RosterExportCard(state, selected.students.isNotEmpty()) }
         }
     }
 }
 
-@Composable
-private fun ImportPreview(state: AppState, plan: RosterImporter.Plan, parsed: RosterImporter.Parsed) {
-    val appear = remember { MutableTransitionState(false).apply { targetState = true } }
-    AnimatedVisibility(
-        visibleState = appear,
-        enter = expandVertically(
-            animationSpec = spring(
-                dampingRatio = 0.75f,
-                stiffness = Spring.StiffnessMediumLow,
-            ),
-            expandFrom = Alignment.Top,
-        ) + fadeIn(tween(200)),
-    ) {
-        BrandCard {
-            SectionLabel("Import preview")
-            Spacer(Modifier.height(10.dp))
-            KeyValueRow("File", state.importSourceName)
-            KeyValueRow(
-                label = "Section in the file",
-                value = if (parsed.sectionName.isBlank()) "(not named in the file)" else parsed.sectionName,
-            )
-            KeyValueRow("Updated in the file", ReportBuilder.dateUpdatedText(parsed.updatedAt))
-            KeyValueRow(
-                label = "Student rows",
-                value = parsed.rows.size.toString() + "  ·  skipped " + parsed.skipped.size,
-            )
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
-                value = state.importTargetName,
-                onValueChange = { state.importSectionNameChanged(it) },
-                label = { Text("Section name to import into") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(10.dp))
-            if (plan.error.isNotEmpty()) {
-                Text(
-                    text = "Refused: " + plan.error,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            } else {
-                Text(
-                    text = if (plan.mergeIntoExisting) {
-                        "Merge into " + plan.targetName + " - nothing already there is removed."
-                    } else {
-                        "Create " + plan.targetName + " from these students."
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Spacer(Modifier.height(4.dp))
-                Note(
-                    plan.added.size.toString() + " added, " + plan.renamed.size + " renamed, " +
-                        plan.unchanged.size + " unchanged, " + plan.keptLocally.size + " kept, " +
-                        plan.skipped.size + " skipped"
-                )
-                Spacer(Modifier.height(10.dp))
-                var index = 0
-                for (row in plan.added) {
-                    StaggeredRow(index++) {
-                        Text(
-                            text = "add " + row.name + "   " + row.uid,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-                for ((row, previous) in plan.renamed) {
-                    StaggeredRow(index++) {
-                        Text(
-                            text = "name update " + row.uid + ": " + previous + " -> " + row.name,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-                for (student in plan.keptLocally) {
-                    StaggeredRow(index++) {
-                        Text(
-                            text = "kept (not in the file) " + student.name + "   " + student.uid,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                for (skip in plan.skipped) {
-                    StaggeredRow(index++) {
-                        Text(
-                            text = "skipped row " + skip.rowNumber + ": " + skip.reason,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-                KeyValueRow(
-                    label = "Updated after import",
-                    value = ReportBuilder.dateUpdatedText(plan.resultingUpdatedAt),
-                )
-            }
-            Spacer(Modifier.height(12.dp))
-            Row {
-                Button(onClick = { state.confirmImport() }) { Text("Import") }
-                Spacer(Modifier.width(10.dp))
-                OutlinedButton(onClick = { state.cancelImport() }) { Text("Cancel") }
-            }
-        }
-    }
-}
+/** A card face's own proportions: a playing card's 1 : 1.43. */
+private val FaceWidth = 200.dp
+private val FaceHeight = 286.dp
+
+/**
+ * The shelf is where the classes live, so its cards are dealt this much bigger -
+ * they take the room the shelf would otherwise leave empty above the tabs.
+ */
+private val ShelfCardWidth = 260.dp
+private val ShelfCardHeight = 372.dp
 
 /**
  * A section card, retextured as a real playing card: ivory stock, the black or red
  * corner index in two opposite corners, and a faint suit watermark behind the class
  * details. Selection is the accent border and the lift, not a repaint.
+ *
+ * The chosen card carries one chip: Manage, along the bottom edge.
  */
 @Composable
 fun SectionCard(
@@ -400,6 +299,10 @@ fun SectionCard(
     selected: Boolean,
     modifier: Modifier = Modifier,
     onSelect: () -> Unit,
+    onManage: (() -> Unit)? = null,
+    glow: CardGlow = CardGlow.Idle,
+    cardWidth: Dp = FaceWidth,
+    cardHeight: Dp = FaceHeight,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val accent = MaterialTheme.colorScheme.primary
@@ -415,16 +318,20 @@ fun SectionCard(
             color = if (selected) accent else MaterialTheme.colorScheme.outline,
         ),
         modifier = modifier
-            .width(200.dp)
-            .height(286.dp)
+            .width(cardWidth)
+            .height(cardHeight)
             // The glow is the accent colour, not grey: a chosen class lights up.
             .shadow(
-                elevation = if (selected) 18.dp else 0.dp,
+                // Damped: a chosen class sits in a hint of light, not a halo.
+                elevation = if (selected) 10.dp else 0.dp,
                 shape = RoundedCornerShape(14.dp),
                 clip = false,
-                ambientColor = accent,
-                spotColor = accent,
+                ambientColor = accent.copy(alpha = 0.35f),
+                spotColor = accent.copy(alpha = 0.5f),
             )
+            // While the app is listening for cards the chosen card breathes, and
+            // every card that lands makes the glow swell.
+            .cardGlow(accent = accent, glow = glow, enabled = selected)
             .pressScale(interaction)
             .cardClick(interaction, onClick = onSelect),
     ) {
@@ -433,12 +340,12 @@ fun SectionCard(
                 Box(
                     modifier = Modifier
                         .align(Alignment.Center)
-                        .size(170.dp)
+                        .size(cardWidth * 0.85f)
                         .background(
                             Brush.radialGradient(
                                 listOf(accent.copy(alpha = 0.16f), Color.Transparent)
                             ),
-                            RoundedCornerShape(85.dp),
+                            RoundedCornerShape(cardWidth * 0.425f),
                         ),
                 )
             }
@@ -494,7 +401,7 @@ fun SectionCard(
                 }
             }
             Column(
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp),
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 46.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
@@ -504,10 +411,11 @@ fun SectionCard(
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = "Updated " + ReportBuilder.dateUpdatedText(section.updatedAt),
+                    text = ReportBuilder.dateUpdatedText(section.updatedAt),
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
             if (selected) {
@@ -520,13 +428,22 @@ fun SectionCard(
                     modifier = Modifier.align(Alignment.TopEnd),
                 )
             }
+            if (selected && onManage != null) {
+                CardChip(
+                    label = "Manage",
+                    accent = MaterialTheme.colorScheme.primary,
+                    onClick = onManage,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
+            }
         }
     }
 }
 
 /**
  * The default texture: a civil engineering drawing sheet. A drafting grid, a truss
- * mark where a card keeps its index, and a title block along the bottom.
+ * mark where a card keeps its index, and a title block along the bottom. The chosen
+ * sheet carries a Manage chip along its bottom edge.
  */
 @Composable
 fun PlainSectionCard(
@@ -534,6 +451,10 @@ fun PlainSectionCard(
     selected: Boolean,
     modifier: Modifier = Modifier,
     onSelect: () -> Unit,
+    onManage: (() -> Unit)? = null,
+    glow: CardGlow = CardGlow.Idle,
+    cardWidth: Dp = FaceWidth,
+    cardHeight: Dp = FaceHeight,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val ink = MaterialTheme.colorScheme.onSurface
@@ -546,8 +467,13 @@ fun PlainSectionCard(
         ),
         shadowElevation = if (selected) 12.dp else 2.dp,
         modifier = modifier
-            .width(200.dp)
-            .height(286.dp)
+            .width(cardWidth)
+            .height(cardHeight)
+            .cardGlow(
+                accent = MaterialTheme.colorScheme.primary,
+                glow = glow,
+                enabled = selected,
+            )
             .pressScale(interaction)
             .cardClick(interaction, onClick = onSelect),
     ) {
@@ -620,10 +546,21 @@ fun PlainSectionCard(
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = "Updated " + ReportBuilder.dateUpdatedText(section.updatedAt),
+                    text = ReportBuilder.dateUpdatedText(section.updatedAt),
                     fontSize = 11.sp,
                     color = ink.copy(alpha = 0.55f),
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                // Room for the Manage chip that sits over the bottom edge of the sheet.
+                Spacer(Modifier.height(26.dp))
+            }
+            if (selected && onManage != null) {
+                CardChip(
+                    label = "Manage",
+                    accent = MaterialTheme.colorScheme.primary,
+                    onClick = onManage,
+                    modifier = Modifier.align(Alignment.BottomCenter),
                 )
             }
         }
@@ -632,7 +569,8 @@ fun PlainSectionCard(
 
 /**
  * The polyhedron texture: a dark card whose face is a wireframe solid, drawn in the
- * accent colour and lit up when the class is the chosen one.
+ * accent colour and lit up when the class is the chosen one. The chosen card carries
+ * a Manage chip along its bottom edge.
  */
 @Composable
 fun SolidSectionCard(
@@ -641,6 +579,10 @@ fun SolidSectionCard(
     selected: Boolean,
     modifier: Modifier = Modifier,
     onSelect: () -> Unit,
+    onManage: (() -> Unit)? = null,
+    glow: CardGlow = CardGlow.Idle,
+    cardWidth: Dp = FaceWidth,
+    cardHeight: Dp = FaceHeight,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val accent = MaterialTheme.colorScheme.primary
@@ -653,15 +595,17 @@ fun SolidSectionCard(
             color = if (selected) accent else MaterialTheme.colorScheme.outline,
         ),
         modifier = modifier
-            .width(200.dp)
-            .height(286.dp)
+            .width(cardWidth)
+            .height(cardHeight)
             .shadow(
-                elevation = if (selected) 18.dp else 0.dp,
+                // Damped: a chosen class sits in a hint of light, not a halo.
+                elevation = if (selected) 10.dp else 0.dp,
                 shape = RoundedCornerShape(14.dp),
                 clip = false,
-                ambientColor = accent,
-                spotColor = accent,
+                ambientColor = accent.copy(alpha = 0.35f),
+                spotColor = accent.copy(alpha = 0.5f),
             )
+            .cardGlow(accent = accent, glow = glow, enabled = selected)
             .pressScale(interaction)
             .cardClick(interaction, onClick = onSelect),
     ) {
@@ -670,12 +614,12 @@ fun SolidSectionCard(
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .size(120.dp)
+                        .size(cardWidth * 0.6f)
                         .background(
                             Brush.radialGradient(
                                 listOf(accent.copy(alpha = 0.18f), Color.Transparent)
                             ),
-                            RoundedCornerShape(60.dp),
+                            RoundedCornerShape(cardWidth * 0.3f),
                         ),
                 )
             }
@@ -696,7 +640,7 @@ fun SolidSectionCard(
                 stroke = 1.1.dp,
                 modifier = Modifier.align(Alignment.TopEnd),
             )
-            Column(modifier = Modifier.align(Alignment.BottomStart)) {
+            Column(modifier = Modifier.align(Alignment.BottomStart).padding(bottom = 30.dp)) {
                 Text(
                     text = section.name,
                     fontFamily = FontFamily.Serif,
@@ -722,6 +666,14 @@ fun SolidSectionCard(
                     fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
+                )
+            }
+            if (selected && onManage != null) {
+                CardChip(
+                    label = "Manage",
+                    accent = accent,
+                    onClick = onManage,
+                    modifier = Modifier.align(Alignment.BottomCenter),
                 )
             }
         }
@@ -752,201 +704,40 @@ private fun CardIndex(
     }
 }
 
+/**
+ * The action a chosen class card carries, drawn on the card itself: Manage opens
+ * the class's own page. Only the chosen card shows it, so the shelf stays quiet
+ * until a class is picked.
+ */
 @Composable
-private fun NewSectionTile(
-    modifier: Modifier = Modifier,
-    emphasised: Boolean = false,
+private fun CardChip(
+    label: String,
+    accent: Color,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val interaction = remember { MutableInteractionSource() }
-
-    val ring by animateColorAsState(
-        targetValue = if (emphasised) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-        animationSpec = tween(MotionTouchMs, easing = EmphasizedDecelerate),
-        label = "tileRing",
-    )
-    val thickness by animateDpAsState(
-        targetValue = if (emphasised) 2.dp else 1.dp,
-        animationSpec = tween(MotionTouchMs, easing = EmphasizedDecelerate),
-        label = "tileThickness",
-    )
-    val lift by animateDpAsState(
-        targetValue = if (emphasised) 16.dp else 0.dp,
-        animationSpec = tween(MotionScreenMs, easing = EmphasizedDecelerate),
-        label = "tileLift",
-    )
-    val glow by animateFloatAsState(
-        targetValue = if (emphasised) 1f else 0f,
-        animationSpec = tween(MotionScreenMs, easing = EmphasizedDecelerate),
-        label = "tileGlow",
-    )
-    val breathing = rememberInfiniteTransition(label = "tileBreathe")
-    val breathe by breathing.animateFloat(
-        initialValue = 0.55f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "breathe",
-    )
-
-    Box(
-        modifier = modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Surface(
-            color = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(18.dp),
-            border = BorderStroke(
-                width = thickness,
-                color = if (emphasised) ring.copy(alpha = glow * breathe) else ring,
-            ),
-            modifier = Modifier
-                // Exactly the page slot, the same as a section card, so the carousel's
-                // own zoom makes this the biggest card on screen when it is focused.
-                .fillMaxWidth()
-                .shadow(
-                elevation = lift,
-                shape = RoundedCornerShape(18.dp),
-                clip = false,
-                ambientColor = MaterialTheme.colorScheme.primary,
-                spotColor = MaterialTheme.colorScheme.primary,
-            )
-            .pressScale(interaction)
+    Surface(
+        color = accent.copy(alpha = 0.18f),
+        contentColor = accent,
+        shape = RoundedCornerShape(50),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.6f)),
+        modifier = modifier
+            .height(28.dp)
+            .pressScale(interaction, pressed = 0.94f)
             .cardClick(interaction, onClick = onClick),
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Icon(
-                painter = painterResource(R.drawable.ic_add),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(22.dp),
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = "New section",
-                style = MaterialTheme.typography.titleSmall,
-                color = if (emphasised) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
-            )
-            Spacer(Modifier.height(2.dp))
-            Note("Adds a class roster")
-        }
-    }
-}
-}
-
-@Composable
-private fun SelectedSectionCard(
-    state: AppState,
-    selected: Section,
-    renameDraft: String,
-    onRenameDraft: (String) -> Unit,
-    confirmDelete: Boolean,
-    onConfirmDelete: (Boolean) -> Unit,
-    expanded: Boolean,
-    onToggle: () -> Unit,
-) {
-    var subject by remember(selected.name) { mutableStateOf(selected.subject) }
-    BrandCard(modifier = Modifier.animateContentSize()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                SectionLabel("Section")
-                Text(text = selected.name, style = MaterialTheme.typography.titleMedium)
-                Note(
-                    selected.students.size.toString() + " registered  ·  updated " +
-                        ReportBuilder.dateUpdatedText(selected.updatedAt)
-                )
-            }
-            TextButton(onClick = onToggle) { Text(if (expanded) "Done" else "Manage") }
-        }
-        if (!expanded) return@BrandCard
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
-            value = subject,
-            onValueChange = { subject = it },
-            label = { Text("Subject (e.g. Surveying)") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(10.dp))
-        OutlinedButton(onClick = { state.useSubject(subject) }) { Text("Save subject") }
-        Spacer(Modifier.height(16.dp))
-        OutlinedTextField(
-            value = renameDraft,
-            onValueChange = onRenameDraft,
-            label = { Text("Rename section to") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(10.dp))
-        Row {
-            Button(onClick = {
-                state.renameSelectedSection(renameDraft)
-                if (state.sectionsError.isEmpty()) onRenameDraft("")
-            }) {
-                Text("Rename")
-            }
-            Spacer(Modifier.width(10.dp))
-            OutlinedButton(onClick = { onConfirmDelete(true) }) { Text("Delete section") }
-        }
-        if (confirmDelete) {
-            Spacer(Modifier.height(12.dp))
-            Note(
-                "Delete " + selected.name + " and its " + selected.students.size +
-                    " registered student(s)? Registered cards cannot be recovered."
-            )
-            Spacer(Modifier.height(8.dp))
-            Row {
-                Button(
-                    onClick = {
-                        onConfirmDelete(false)
-                        state.deleteSection(selected.name)
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = MaterialTheme.colorScheme.onError,
-                    ),
-                ) {
-                    Text("Yes, delete")
-                }
-                Spacer(Modifier.width(10.dp))
-                OutlinedButton(onClick = { onConfirmDelete(false) }) { Text("Cancel") }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RosterExportCard(state: AppState, hasStudents: Boolean) {
-    BrandCard(modifier = Modifier.animateContentSize()) {
-        SectionLabel("Export")
-        Spacer(Modifier.height(10.dp))
-        Button(
-            onClick = { state.exportRoster() },
-            enabled = hasStudents,
-            modifier = Modifier.fillMaxWidth(),
+        Box(
+            modifier = Modifier.padding(horizontal = 12.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_export),
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
+            Text(
+                text = label,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 0.6.sp,
             )
-            Spacer(Modifier.width(8.dp))
-            Text("Export section roster .xlsx")
         }
-        if (!hasStudents) {
-            Spacer(Modifier.height(8.dp))
-            Note("Register at least one card and this becomes available.")
-        }
-        ExportResult(
-            path = state.rosterPath,
-            note = state.rosterError,
-            onShare = state.rosterUri?.let { uri -> { state.shareFile(uri) } },
-        )
     }
 }
+

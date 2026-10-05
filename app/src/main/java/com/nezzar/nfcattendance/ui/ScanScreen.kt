@@ -26,15 +26,14 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import com.nezzar.nfcattendance.R
 import com.nezzar.nfcattendance.data.ReportBuilder
-import com.nezzar.nfcattendance.nfc.NfcScanner
+import com.nezzar.nfcattendance.nfc.NfcState
 
 @Composable
 fun ScanScreen(state: AppState, activity: Activity) {
     val haptics = LocalHapticFeedback.current
-    // Capability query only - AppRoot owns the reader itself.
-    val scanner = remember(activity) { NfcScanner(activity) }
-    val supported = scanner.isSupported()
-    val enabled = scanner.isEnabled()
+    // AppRoot owns the reader and reports what the hardware is doing: one source of
+    // truth, so the light and the sentence below can never disagree.
+    val nfc = state.nfcState
 
     val resolved = state.resolved()
     val section = state.selectedSection
@@ -62,18 +61,25 @@ fun ScanScreen(state: AppState, activity: Activity) {
 
         item(key = "reader") {
             BrandCard(modifier = Modifier.animateContentSize()) {
-                SectionLabel("NFC reader")
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    NfcLight(state)
+                    SectionLabel("NFC reader")
+                }
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = if (!supported) {
-                        "No NFC adapter on this device (an emulator never has one)."
-                    } else if (!enabled) {
-                        "NFC adapter is present but switched off in system settings."
-                    } else if (state.paused) {
-                        "Paused - the reader is off and taps are ignored. Press Resume when the " +
-                            "class (or a late arrival) is ready."
-                    } else {
-                        "Reader mode active - hold each student ID to the phone's NFC antenna."
+                    text = when {
+                        nfc == NfcState.UNSUPPORTED ->
+                            "No NFC adapter on this device (an emulator never has one)."
+                        nfc == NfcState.DISABLED ->
+                            "NFC adapter is present but switched off in system settings."
+                        state.paused ->
+                            "Paused - the reader is off and taps are ignored. Press Resume when the " +
+                                "class (or a late arrival) is ready."
+                        else ->
+                            "Reader mode active - hold each student ID to the phone's NFC antenna."
                     },
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -97,7 +103,7 @@ fun ScanScreen(state: AppState, activity: Activity) {
                         Spacer(Modifier.height(8.dp))
                         Note(
                             if (section == null) "Create a section first, then register its students."
-                            else "No cards registered in " + section.name + " yet."
+                            else "No students registered in " + section.name + " yet."
                         )
                         Spacer(Modifier.height(8.dp))
                         OutlinedButton(

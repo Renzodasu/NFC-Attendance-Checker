@@ -48,16 +48,15 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import com.nezzar.nfcattendance.R
-import com.nezzar.nfcattendance.nfc.NfcScanner
+import com.nezzar.nfcattendance.nfc.NfcState
 
 @Composable
 fun RegisterScreen(state: AppState, activity: Activity) {
     val view = LocalView.current
     val haptics = LocalHapticFeedback.current
-    // Capability query only - AppRoot owns the reader itself.
-    val scanner = remember(activity) { NfcScanner(activity) }
-    val supported = scanner.isSupported()
-    val enabled = scanner.isEnabled()
+    // AppRoot owns the reader and reports what the hardware is doing: one source of
+    // truth, so the light and the sentence below can never disagree.
+    val nfc = state.nfcState
 
     val register = state.registerState
     val section = state.selectedSection
@@ -77,6 +76,14 @@ fun RegisterScreen(state: AppState, activity: Activity) {
             }
         }
     }
+
+    // The editor is the last card in this list, which is exactly where the
+    // keyboard lands: lift it to the top of the viewport as the keyboard opens.
+    RevealTypingField(
+        listState = listState,
+        index = (if (state.selectedSection != null) 1 else 0) + 3,
+        active = register.pendingUid != null,
+    )
 
     // A small pulse every time a card lands, so the tap is felt as well as seen.
     val pulse by animateFloatAsState(
@@ -106,15 +113,22 @@ fun RegisterScreen(state: AppState, activity: Activity) {
 
         item(key = "status") {
             BrandCard(modifier = Modifier.animateContentSize()) {
-                SectionLabel("Reader")
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    NfcLight(state)
+                    SectionLabel("Reader")
+                }
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = if (!supported) {
-                        "No NFC adapter on this device (an emulator never has one)."
-                    } else if (!enabled) {
-                        "NFC adapter is present but switched off in system settings."
-                    } else {
-                        "Reader mode active - hold the ID card to the phone's NFC antenna."
+                    text = when (nfc) {
+                        NfcState.UNSUPPORTED ->
+                            "No NFC adapter on this device (an emulator never has one)."
+                        NfcState.DISABLED ->
+                            "NFC adapter is present but switched off in system settings."
+                        NfcState.ENABLED ->
+                            "Reader mode active - hold the ID card to the phone's NFC antenna."
                     },
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -169,7 +183,7 @@ fun RegisterScreen(state: AppState, activity: Activity) {
                     Note(register.message)
                 }
                 Spacer(Modifier.height(10.dp))
-                KeyValueRow("Cards saved this run", register.savedCount.toString())
+                KeyValueRow("Students saved this run", register.savedCount.toString())
                 KeyValueRow(
                     label = "Last saved",
                     value = register.lastSaved ?: "nothing yet",

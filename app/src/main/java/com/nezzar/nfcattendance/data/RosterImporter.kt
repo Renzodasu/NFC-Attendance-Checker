@@ -17,10 +17,19 @@ object RosterImporter {
     const val LABEL_DATE_UPDATED = "Date updated"
     const val NOT_RECORDED = "Not recorded"
 
+    /**
+     * Accepted "Date updated" shapes. The first two are what older files carry,
+     * the next two are what this app writes now (month in words, civilian clock),
+     * and the date-only shapes come last. A combined shape must precede a
+     * date-only one, otherwise the clock would be silently dropped.
+     */
     private val DATE_FORMATS = listOf(
         "yyyy-MM-dd HH:mm",
         "yyyy-MM-dd HH:mm:ss",
+        "d MMMM yyyy, h:mm a",
+        "d MMMM yyyy, h:mm:ss a",
         "yyyy-MM-dd",
+        "d MMMM yyyy",
     )
 
     /** One usable student row, with the spreadsheet row it came from. */
@@ -119,7 +128,10 @@ object RosterImporter {
         return Parsed(sectionName, updatedAt, out, skipped, subject = subject)
     }
 
-    /** "yyyy-MM-dd HH:mm" (also with seconds, or date only) as epoch millis. 0 when absent. */
+    /**
+     * "4 October 2026, 3:16 PM" (or the older "yyyy-MM-dd HH:mm", with or without
+     * seconds, or a date on its own) as epoch millis. 0 when absent.
+     */
     fun parseDate(raw: String): Long {
         val text = raw.trim()
         if (text.isEmpty() || text.equals(NOT_RECORDED, ignoreCase = true)) return 0L

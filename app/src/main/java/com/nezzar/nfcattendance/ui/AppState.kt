@@ -30,6 +30,7 @@ import com.nezzar.nfcattendance.data.Tap
 import com.nezzar.nfcattendance.data.Uid
 import com.nezzar.nfcattendance.data.XlsxReader
 import com.nezzar.nfcattendance.data.XlsxWriter
+import com.nezzar.nfcattendance.nfc.NfcState
 import com.nezzar.nfcattendance.ui.theme.ThemeMode
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -40,7 +41,7 @@ import java.util.Locale
 enum class Screen { SECTIONS, REGISTER, SCAN, REPORT }
 
 /** A full-screen page that opens over the tabs (from the sidebar, never a tab itself). */
-enum class Overlay { SETTINGS, TUTORIAL, STUDENT, ROSTER, NEW_SECTION }
+enum class Overlay { SETTINGS, TUTORIAL, STUDENT, ROSTER, NEW_SECTION, SECTION }
 
 /** The raw and byte-reversed readings, shown side by side while calibrating. */
 data class RecentTap(val asRead: String, val reversed: String)
@@ -83,8 +84,8 @@ class AppState(context: Context) {
         cardFlight = shelfCardRect
     }
 
-    /** The section texture: the plain engineering sheet, or the playing deck. */
-    var visualStyle by mutableStateOf(VisualStyle.PLAIN)
+    /** The section texture: the playing deck by default, or the engineering sheet. */
+    var visualStyle by mutableStateOf(VisualStyle.CARDS)
 
     /** How hard a card read buzzes, and whether it beeps. */
     var hapticStrength by mutableStateOf(HapticStrength.NORMAL)
@@ -93,7 +94,7 @@ class AppState(context: Context) {
     // Sections + roster ------------------------------------------------------
     var sections by mutableStateOf<List<Section>>(emptyList())
     var selectedName by mutableStateOf("")
-    var sectionsMessage by mutableStateOf("No sections yet. Create one, then register cards into it.")
+    var sectionsMessage by mutableStateOf("No sections yet. Create one, then register students into it.")
     var sectionsError by mutableStateOf("")
     var uidReversed by mutableStateOf(false)
     var rosterPath by mutableStateOf<String?>(null)
@@ -121,6 +122,36 @@ class AppState(context: Context) {
     var reportPath by mutableStateOf<String?>(null)
     var reportError by mutableStateOf<String?>(null)
     var reportUri by mutableStateOf<Uri?>(null)
+
+    // The chosen card's live glow ---------------------------------------------
+    /** The instant a card actually landed, so the chosen card can swell on the beat. */
+    var lastCardReadAt by mutableStateOf(0L)
+
+    /** True while the app is listening for cards: registering, or a live session. */
+    val listeningForCards: Boolean
+        get() = registerState.armed || (running && !paused)
+
+    /** What the chosen card should be doing right now: a standby pulse, a swell per read. */
+    val cardGlow: CardGlow
+        get() = CardGlow(standby = listeningForCards, beat = lastCardReadAt)
+
+    /** A card landed - registered or scanned - so the chosen card swells once. */
+    fun noteCardRead() {
+        lastCardReadAt = System.currentTimeMillis()
+    }
+
+    // The phone's reader ------------------------------------------------------
+    /**
+     * What the NFC hardware is doing right now. AppRoot owns the scanner, so it
+     * reports this down here; the reader light draws itself from this value.
+     */
+    var nfcState by mutableStateOf(NfcState.UNSUPPORTED)
+        private set
+
+    /** AppRoot owns the scanner, so it tells the app what the hardware is doing. */
+    fun useNfcState(value: NfcState) {
+        if (value != nfcState) nfcState = value
+    }
 
     init {
         sections = store.loadSections()
@@ -206,6 +237,40 @@ class AppState(context: Context) {
     /** The class subject of the selected section, set from its Manage card. */
     fun useSubject(subject: String) = applyEdit(Sections.setSubject(sections, selectedName, subject))
 
+    /**
+     * The Manage page saves the whole section at once - name, subject and card
+     * face - because one Save button that means everything is easier to trust
+     * than three that each mean a part. The name goes first: the other two
+     * address the section by it.
+     *
+     * Everything that can be refused is refused BEFORE anything is written, so a
+     * taken face or a blank name leaves the section exactly as it was.
+     */
+    fun saveSectionEdits(name: String, subject: String, suit: String, rank: String) {
+        val target = selectedSection ?: return
+        if (suit.isNotEmpty() != rank.isNotEmpty()) {
+            sectionsError = "Pick both a symbol and a number, or leave the face as it is."
+            return
+        }
+        val face = if (suit.isNotEmpty() && rank.isNotEmpty()) rank + suit else ""
+        if (face.isNotEmpty() && face != target.card) {
+            val clash = sections.firstOrNull { it.name != target.name && it.card == face }
+            if (clash != null) {
+                sectionsError = clash.name + " already holds " + face + ". Pick another face."
+                return
+            }
+        }
+        if (name.trim() != target.name) {
+            renameSelectedSection(name)
+            if (sectionsError.isNotEmpty()) return
+        }
+        useSubject(subject)
+        if (sectionsError.isNotEmpty()) return
+        if (face.isNotEmpty() && face != target.card) {
+            applyEdit(Sections.setCard(sections, selectedName, face))
+        }
+    }
+
     fun renameStudent(uid: String, newName: String) =
         applyEdit(Sections.renameStudent(sections, selectedName, uid, newName))
 
@@ -279,6 +344,12 @@ class AppState(context: Context) {
         importError = ""
     }
 
+    /** The Manage control on a section card opens this: subject, name, and delete. */
+    fun openSection() {
+        overlay = Overlay.SECTION
+        sectionsError = ""
+    }
+
     /** Every registered card of the selected section, on one page of its own. */
     fun openRoster() {
         overlay = Overlay.ROSTER
@@ -295,6 +366,20 @@ class AppState(context: Context) {
     fun closeOverlay() {
         overlay = null
         editingStudentUid = null
+        setHeaderAction(null, null)
+    }
+
+    /**
+     * A page can lend the header ONE action, and takes it back when it closes.
+     * The Manage page lends it Save, so the button sits where a form's save
+     * belongs instead of at the bottom of a list you have to scroll to find.
+     */
+    var headerActionLabel by mutableStateOf<String?>(null)
+    var headerAction by mutableStateOf<(() -> Unit)?>(null)
+
+    fun setHeaderAction(label: String?, run: (() -> Unit)?) {
+        headerActionLabel = label
+        headerAction = run
     }
 
     /** True after the guide has been queued to open again on the next start. */

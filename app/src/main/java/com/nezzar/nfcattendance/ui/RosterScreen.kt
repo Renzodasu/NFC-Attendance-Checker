@@ -60,6 +60,13 @@ fun RosterScreen(state: AppState, modifier: Modifier = Modifier) {
         }
     }
 
+    // A long roster grows a search box; keep it clear of the keyboard.
+    RevealTypingField(
+        listState = listState,
+        index = if (students.size > 8) 2 else null,
+        active = students.size > 8,
+    )
+
     LazyColumn(
         state = listState,
         modifier = modifier.fillMaxSize(),
@@ -69,7 +76,9 @@ fun RosterScreen(state: AppState, modifier: Modifier = Modifier) {
         item(key = "title") {
             CollapsingTitle(
                 title = section?.name ?: "Registered students",
-                subtitle = students.size.toString() + " card(s) registered. Tap a student to edit or remove them.",
+                subtitle = students.size.toString() +
+                    (if (students.size == 1) " student" else " students") +
+                    " registered. Tap one to edit or remove them.",
                 listState = listState,
             )
         }
@@ -78,7 +87,7 @@ fun RosterScreen(state: AppState, modifier: Modifier = Modifier) {
             item(key = "empty") {
                 EmptyState(
                     icon = R.drawable.ic_nav_register,
-                    title = "No cards registered yet",
+                    title = "No students registered yet",
                     body = "Open Register, tap a student ID, and type the name it belongs to.",
                     actionLabel = "Go to Register",
                     onAction = { state.closeOverlay(); state.screen = Screen.REGISTER },

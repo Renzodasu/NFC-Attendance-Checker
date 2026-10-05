@@ -152,7 +152,7 @@ class Store(context: Context) {
     fun setHapticStrength(value: String) = putSetting("haptics", value)
 
     /** "plain" (engineering sheet) or "cards" (playing deck). */
-    fun visualStyle(): String = settings().optString("visualStyle", "plain")
+    fun visualStyle(): String = settings().optString("visualStyle", "cards")
 
     fun setVisualStyle(value: String) = putSetting("visualStyle", value)
 

@@ -1,5 +1,6 @@
 package com.nezzar.nfcattendance.ui
 
+import com.nezzar.nfcattendance.BuildConfig
 import com.nezzar.nfcattendance.data.VisualStyle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -113,8 +114,8 @@ fun SettingsScreen(state: AppState, modifier: Modifier = Modifier) {
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(
-                        VisualStyle.PLAIN to "Plain",
                         VisualStyle.CARDS to "Cards",
+                        VisualStyle.PLAIN to "Plain",
                         VisualStyle.SOLIDS to "Solids",
                     ).forEach { (style, label) ->
                         val chosen = state.visualStyle == style
@@ -133,11 +134,11 @@ fun SettingsScreen(state: AppState, modifier: Modifier = Modifier) {
                 }
                 Spacer(Modifier.height(10.dp))
                 Note(
-                    "Plain is the default: a class is filed the way a civil engineering " +
-                        "department files one, as a drafting sheet with a truss mark and a title " +
-                        "block. Cards deals every class a face from a 52-card deck, drawn dark " +
-                        "and subtle with green shapes. Solids gives each class a wireframe " +
-                        "polyhedron - prism, cube, octahedron, icosahedron and so on."
+                    "Cards is the default: every class is dealt a face from a 52-card deck, " +
+                        "drawn dark and subtle with green shapes. Plain is the civil engineering " +
+                        "sheet - a drafting grid with a truss mark and a title block. Solids gives " +
+                        "each class a wireframe polyhedron - prism, cube, octahedron, icosahedron " +
+                        "and so on."
                 )
             }
         }
@@ -237,7 +238,7 @@ fun SettingsScreen(state: AppState, modifier: Modifier = Modifier) {
                 SectionLabel("Your data")
                 Spacer(Modifier.height(10.dp))
                 KeyValueRow("Sections", state.sections.size.toString())
-                KeyValueRow("Registered cards", cards.toString())
+                KeyValueRow("Registered students", cards.toString())
                 KeyValueRow("Exports", "Documents/NFC Attendance")
                 Spacer(Modifier.height(8.dp))
                 Note(
@@ -274,7 +275,7 @@ fun SettingsScreen(state: AppState, modifier: Modifier = Modifier) {
                 SectionLabel("About")
                 Spacer(Modifier.height(8.dp))
                 KeyValueRow("App", "NFC Attendance Checker")
-                KeyValueRow("Version", "1.0")
+                KeyValueRow("Version", BuildConfig.VERSION_NAME)
                 KeyValueRow("Works without", "Internet, account, login")
                 Spacer(Modifier.height(8.dp))
                 Note(

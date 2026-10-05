@@ -1,7 +1,6 @@
 package com.nezzar.nfcattendance.ui
 
 import com.nezzar.nfcattendance.data.VisualStyle
-import com.nezzar.nfcattendance.data.PlayingCards
 import androidx.compose.ui.unit.sp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -64,6 +63,10 @@ fun NewSectionScreen(state: AppState, modifier: Modifier = Modifier) {
         if (uri != null) state.stageImport(uri)
     }
 
+    // The class name and subject live in the second card: keep them above the
+    // keyboard when it opens.
+    RevealTypingField(listState = listState, index = 1, active = true)
+
     LazyColumn(
         state = listState,
         modifier = modifier.fillMaxSize(),
@@ -106,47 +109,20 @@ fun NewSectionScreen(state: AppState, modifier: Modifier = Modifier) {
                     Spacer(Modifier.height(14.dp))
                     SectionLabel("Card face")
                     Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        PlayingCards.SUITS.forEach { candidate ->
-                            val chosen = suit == candidate
-                            if (chosen) {
-                                Button(
-                                    onClick = { suit = candidate },
-                                    modifier = Modifier.weight(1f),
-                                ) { Text(candidate) }
-                            } else {
-                                OutlinedButton(
-                                    onClick = { suit = candidate },
-                                    modifier = Modifier.weight(1f),
-                                ) { Text(candidate) }
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    PlayingCards.RANKS.chunked(7).forEach { group ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            group.forEach { candidate ->
-                                val chosen = rank == candidate
-                                if (chosen) {
-                                    Button(
-                                        onClick = { rank = candidate },
-                                        modifier = Modifier.weight(1f),
-                                        contentPadding = PaddingValues(0.dp),
-                                    ) { Text(candidate, fontSize = 12.sp) }
-                                } else {
-                                    OutlinedButton(
-                                        onClick = { rank = candidate },
-                                        modifier = Modifier.weight(1f),
-                                        contentPadding = PaddingValues(0.dp),
-                                    ) { Text(candidate, fontSize = 12.sp) }
-                                }
-                            }
-                            repeat(7 - group.size) { Spacer(Modifier.weight(1f)) }
-                        }
-                        Spacer(Modifier.height(4.dp))
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Note("Pick a face, or leave both alone and the app deals one no other class is holding.")
+                    // Two short fields; tapping either one reveals a single box
+                    // holding every symbol and every number, so a whole face is
+                    // set in one visit instead of two separate lists.
+                    FacePicker(
+                        suit = suit,
+                        rank = rank,
+                        onSuit = { suit = it },
+                        onRank = { rank = it },
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Note(
+                        "Pick a symbol and a number, or leave both on Any and the app deals " +
+                            "one no other class is holding."
+                    )
                 }
                 Spacer(Modifier.height(12.dp))
                 val chosenFace = rank + suit

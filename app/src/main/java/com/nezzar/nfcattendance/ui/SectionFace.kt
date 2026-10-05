@@ -16,9 +16,9 @@ import androidx.compose.ui.layout.boundsInRoot
 import com.nezzar.nfcattendance.data.VisualStyle
 
 /**
- * The selected class, drawn exactly the way the Sections shelf draws it - the same
- * 200 x 286 card, the same theme face, the same chosen treatment - centred, and it
- * flies in from the shelf card's own rectangle when you arrive from there.
+ * The selected class, drawn with the same theme face and the same chosen treatment
+ * as the shelf, at the page's own smaller size - centred, and it flies in from the
+ * shelf card's own rectangle when you arrive from there.
  */
 @Composable
 fun SectionFaceCard(state: AppState, modifier: Modifier = Modifier) {
@@ -64,14 +64,25 @@ fun SectionFaceCard(state: AppState, modifier: Modifier = Modifier) {
             },
         ) {
             when (state.visualStyle) {
-                VisualStyle.PLAIN -> PlainSectionCard(section, selected = true, onSelect = {})
+                VisualStyle.PLAIN -> PlainSectionCard(
+                    section = section,
+                    selected = true,
+                    onSelect = {},
+                    glow = state.cardGlow,
+                )
                 VisualStyle.SOLIDS -> SolidSectionCard(
                     section = section,
                     index = index,
                     selected = true,
                     onSelect = {},
+                    glow = state.cardGlow,
                 )
-                else -> SectionCard(section, selected = true, onSelect = {})
+                else -> SectionCard(
+                    section = section,
+                    selected = true,
+                    onSelect = {},
+                    glow = state.cardGlow,
+                )
             }
         }
     }

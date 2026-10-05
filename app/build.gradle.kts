@@ -4,7 +4,7 @@ plugins {
 }
 
 // Single source of truth for the version shown in the APK file name and the manifest.
-val androidVersionName = "1.0"
+val androidVersionName = "0.0.3"
 
 android {
     namespace = "com.nezzar.nfcattendance"
@@ -16,7 +16,7 @@ android {
         applicationId = "com.nezzar.nfcattendance"
         minSdk = 24
         targetSdk = 37
-        versionCode = 1
+        versionCode = 3
         versionName = androidVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -36,6 +36,9 @@ android {
     }
     buildFeatures {
         compose = true
+        // The About screen reads the version from BuildConfig, so the number it shows
+        // can never drift away from the build. No new dependency.
+        buildConfig = true
     }
 }
 

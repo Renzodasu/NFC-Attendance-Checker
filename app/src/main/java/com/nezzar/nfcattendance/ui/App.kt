@@ -1,8 +1,14 @@
 package com.nezzar.nfcattendance.ui
 
 import android.app.Activity
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.media.AudioManager
 import android.media.ToneGenerator
+import android.nfc.NfcAdapter
+import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -18,6 +24,8 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -108,6 +116,8 @@ fun AppRoot(state: AppState, activity: Activity) {
                 val landed = (state.session?.taps?.size ?: 0) > tapsBefore ||
                     (pendingBefore == null && state.registerState.pendingUid != null)
                 if (landed) {
+                    // The same flag that buzzes the phone swells the chosen card's glow.
+                    state.noteCardRead()
                     if (state.scanSound) tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
                     when (state.hapticStrength) {
                         HapticStrength.OFF -> Unit
@@ -124,6 +134,25 @@ fun AppRoot(state: AppState, activity: Activity) {
             }
         }
         onDispose { scanner.stop() }
+    }
+
+    // The reader light has to be right the moment a page opens, and again when the
+    // user flips NFC in the system panel and comes back to the app.
+    DisposableEffect(activity) {
+        state.useNfcState(scanner.state())
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                state.useNfcState(scanner.state())
+            }
+        }
+        val filter = IntentFilter(NfcAdapter.ACTION_ADAPTER_STATE_CHANGED)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            activity.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            activity.registerReceiver(receiver, filter)
+        }
+        onDispose { activity.unregisterReceiver(receiver) }
     }
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -143,6 +172,7 @@ fun AppRoot(state: AppState, activity: Activity) {
         },
     ) {
         Scaffold(
+            // Plain black behind every page: the theme's own background, unpainted.
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 ShellHeader(state, onMenu = { scope.launch { drawerState.open() } })
@@ -159,13 +189,20 @@ fun AppRoot(state: AppState, activity: Activity) {
         ) { padding ->
             val overlay = state.overlay
             if (overlay != null) {
-                val body = Modifier.fillMaxSize().padding(padding)
+                // imePadding lifts the page above the typing keyboard, and
+                // consumeWindowInsets stops it from paying for the system bar twice.
+                val body = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .consumeWindowInsets(padding)
+                    .imePadding()
                 when (overlay) {
                     Overlay.SETTINGS -> SettingsScreen(state, body)
                     Overlay.TUTORIAL -> TutorialScreen(state, body)
                     Overlay.STUDENT -> StudentScreen(state, state.editingStudentUid ?: "", body)
                     Overlay.ROSTER -> RosterScreen(state, body)
                     Overlay.NEW_SECTION -> NewSectionScreen(state, body)
+                    Overlay.SECTION -> SectionScreen(state, body)
                 }
             } else {
                 AnimatedContent(
@@ -182,7 +219,11 @@ fun AppRoot(state: AppState, activity: Activity) {
                         enter togetherWith exit
                     },
                     label = "tab",
-                    modifier = Modifier.fillMaxSize().padding(padding),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .consumeWindowInsets(padding)
+                        .imePadding(),
                 ) { screen ->
                     when (screen) {
                         Screen.SECTIONS -> SectionsScreen(state)
@@ -212,6 +253,7 @@ private fun ShellHeader(state: AppState, onMenu: () -> Unit) {
         Overlay.STUDENT -> "Student"
         Overlay.ROSTER -> "Registered students"
         Overlay.NEW_SECTION -> "New section"
+        Overlay.SECTION -> "Manage section"
         null -> Destination.entries[state.screen.ordinal].label
     }
     Column {
@@ -237,6 +279,22 @@ private fun ShellHeader(state: AppState, onMenu: () -> Unit) {
                     if (overlay == null) {
                         Spacer(Modifier.width(10.dp))
                         Pill(text = state.selectedSection?.name ?: "No section")
+                    }
+                }
+            },
+            actions = {
+                // A page can lend the header one action. The Manage page lends it
+                // Save, which is where a form's save belongs.
+                val actionLabel = state.headerActionLabel
+                val action = state.headerAction
+                if (actionLabel != null && action != null) {
+                    TextButton(onClick = action) {
+                        Text(
+                            text = actionLabel,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                        )
                     }
                 }
             },
@@ -388,12 +446,16 @@ private fun SessionBar(state: AppState) {
                     modifier = Modifier.size(22.dp),
                 )
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = if (running) (session?.sectionName ?: "Session") else (state.selectedSection?.name ?: "Registering"),
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        NfcLight(state, dot = 8.dp)
+                        Text(
+                            text = if (running) (session?.sectionName ?: "Session") else (state.selectedSection?.name ?: "Registering"),
+                            style = MaterialTheme.typography.titleSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                     Text(
                         text = if (running) {
                             (if (state.paused) "Paused  ·  " else "") +

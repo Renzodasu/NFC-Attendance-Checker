@@ -8,7 +8,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Section store rules: create / select / rename / delete, duplicate-UID updates and the date stamp. */
+/** Section store rules: create / select / rename / delete, the card face, duplicate-UID updates and the date stamp. */
 class SectionsTest {
 
     private fun twoSections(): List<Section> = listOf(
@@ -113,6 +113,36 @@ class SectionsTest {
 
         val nothing = Sections.removeStudent(twoSections(), "BSCE-4B", "04FFFFFF")
         assertTrue(nothing.error.isNotEmpty())
+    }
+
+    // ------------------------------------------------------------ card face
+
+    @Test
+    fun theCardFaceCanBeChangedAndAFaceAnotherSectionHoldsIsRefused() {
+        val start = listOf(
+            Section("BSCE-4B", emptyList(), 1000L, "Surveying", "A\u2660"),
+            Section("BSCE-5A", emptyList(), 1000L, "", "K\u2665"),
+        )
+
+        val changed = Sections.setCard(start, "BSCE-4B", "3\u2666")
+        assertEquals("", changed.error)
+        assertEquals("3\u2666", changed.sections[0].card)
+        assertEquals("BSCE-4B is now 3\u2666.", changed.message)
+        assertEquals("a face is not a roster change", 1000L, changed.sections[0].updatedAt)
+        assertEquals("the other section keeps its face", "K\u2665", changed.sections[1].card)
+
+        val clash = Sections.setCard(start, "BSCE-4B", "K\u2665")
+        assertEquals("BSCE-5A already holds K\u2665. Pick another face.", clash.error)
+        assertEquals("A\u2660", clash.sections[0].card)
+
+        val same = Sections.setCard(start, "BSCE-4B", "A\u2660")
+        assertEquals("Card face unchanged.", same.message)
+
+        val blank = Sections.setCard(start, "BSCE-4B", "   ")
+        assertTrue(blank.error.isNotEmpty())
+
+        val unknown = Sections.setCard(start, "NOPE", "3\u2666")
+        assertTrue(unknown.error.isNotEmpty())
     }
 
     // ------------------------------------------------------------ date updated

@@ -36,6 +36,9 @@ fun StudentScreen(state: AppState, uid: String, modifier: Modifier = Modifier) {
     var confirmRemove by remember(uid) { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
+    // The Name card is the second block on the page: keep it clear of the keyboard.
+    RevealTypingField(listState = listState, index = 2, active = student != null)
+
     LazyColumn(
         state = listState,
         modifier = modifier.fillMaxSize(),

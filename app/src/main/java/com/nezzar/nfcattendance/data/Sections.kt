@@ -64,6 +64,24 @@ object Sections {
         return Edit(updated, message = message)
     }
 
+    /**
+     * The card face is part of what a section IS, like its subject, so setting it
+     * leaves [Section.updatedAt] alone. A face another section already holds is
+     * refused: the shelf is dealt from one deck, and a deck has no duplicates.
+     */
+    fun setCard(sections: List<Section>, sectionName: String, rawCard: String): Edit {
+        val target = find(sections, sectionName) ?: return Edit(sections, error = "No section named " + sectionName + ".")
+        val card = rawCard.trim()
+        if (card.isEmpty()) return Edit(sections, error = "Pick a symbol and a number first.")
+        if (card == target.card) return Edit(sections, message = "Card face unchanged.")
+        val clash = sections.firstOrNull { it.name != target.name && it.card == card }
+        if (clash != null) {
+            return Edit(sections, error = clash.name + " already holds " + card + ". Pick another face.")
+        }
+        val updated = sections.map { if (it.name == target.name) it.copy(card = card) else it }
+        return Edit(updated, message = target.name + " is now " + card + ".")
+    }
+
     fun rename(sections: List<Section>, oldName: String, rawName: String): Edit {
         val target = find(sections, oldName) ?: return Edit(sections, error = "No section named " + oldName + ".")
         val name = rawName.trim()

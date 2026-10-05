@@ -4,9 +4,9 @@ package com.nezzar.nfcattendance.data
  * How the app draws a class section. Independent of light/dark mode: this is the
  * texture, not the lighting.
  *
- * PLAIN is the default - an engineering drawing sheet, which is what a class
- * schedule in a civil engineering department actually looks like.
- * CARDS is the playing-card deck.
+ * CARDS is the default - every class draws its own face from a 52-card deck.
+ * PLAIN is the secondary texture: an engineering drawing sheet, which is what a
+ * class schedule in a civil engineering department actually looks like.
  */
 enum class VisualStyle {
     PLAIN,
@@ -17,7 +17,7 @@ enum class VisualStyle {
         fun fromStored(value: String): VisualStyle = when (value.lowercase()) {
             "cards" -> CARDS
             "solids" -> SOLIDS
-            else -> PLAIN
+            else -> CARDS
         }
     }
 }

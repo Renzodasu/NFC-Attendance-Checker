@@ -35,7 +35,7 @@ class ExportStampTest {
         rows.first { it.isNotEmpty() && it[0] == label }[1]
 
     private fun expected(millis: Long): String =
-        SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(java.util.Date(millis))
+        SimpleDateFormat("d MMMM yyyy, h:mm a", Locale.US).format(java.util.Date(millis))
 
     @Test
     fun theSameUnchangedSectionExportedTwiceCarriesTheSameDateString() {
