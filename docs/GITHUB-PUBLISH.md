@@ -50,32 +50,19 @@ On the repository page, press the cog next to **About**:
 - **Website** - leave empty.
 - Tick **Releases** and **Packages** only if you publish them.
 
-## 4. Cut the first release
+## 4. Cut a release
 
 1. Build the APK: `./gradlew :app:assembleDebug` (or `.\gradlew.bat` on Windows).
-2. On GitHub: **Releases → Draft a new release**.
-3. Tag: `v1.0` - Title: `NFC Attendance Checker 1.0`.
-4. Attach `app/build/outputs/apk/debug/NFC-Attendance-Checker-1.0-debug.apk`.
-5. Paste these release notes:
-
-```markdown
-First public build.
-
-- Four tabs: Sections, Register, Scan, Report.
-- Students register themselves by tapping an ID card; the same card tapped again updates its name
-  instead of adding a duplicate row.
-- Attendance sessions with 3-second duplicate suppression and a live present / absent / unmatched
-  strip above the navigation bar.
-- Exports .xlsx into Documents/NFC Attendance:
-  - roster: section name, date updated, and Name | UID rows;
-  - session: Absent, Present, Unmatched, in that order, absent list first.
-- Imports a workbook a classmate exported and merges by card UID: nothing is deleted, a card never
-  appears twice, and the later of the two dates wins.
-- Dark Material 3 interface, no storage permission, no internet permission.
-- Requires Android 7.0 (API 24) or newer and an NFC reader.
-
-APK: NFC-Attendance-Checker-1.0-debug.apk (debug-signed - fine for classroom use, not for the Play Store).
-```
+   The artefact lands at
+   `app/build/outputs/apk/debug/Presencia-NFC-<version>-debug.apk`.
+2. Commit and tag: `git tag v.0.0.3` (the version in `app/build.gradle.kts`),
+   then `git push --follow-tags`.
+3. On GitHub: **Releases → Draft a new release** → choose the tag, title it
+   **Presencia 0.0.3**, and paste the newest `CHANGELOG.md` section as the notes.
+4. Attach `Presencia-NFC-0.0.3-debug.apk` (debug-signed - fine for classroom
+   use, not for the Play Store).
+5. The **Actions** tab builds and unit-tests every push to `main` or `master`
+   and keeps the APK as a workflow artefact.
 
 ## 5. What is in the repository
 
