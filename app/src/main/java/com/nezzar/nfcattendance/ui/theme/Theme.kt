@@ -7,11 +7,20 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 /** Which palette the app paints with. Stored in settings.json under "theme". */
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
+/**
+ * True while the dark palette is on. Card art needs it: a green wash that reads as
+ * light on a black page reads as a muddy smudge on a white one, so the washes and
+ * glows scale their alpha off this.
+ */
+@Composable
+fun isBrandDark(): Boolean = MaterialTheme.colorScheme.background.luminance() < 0.5f
 
 private val DarkScheme = darkColorScheme(
     primary = BrandPrimary,

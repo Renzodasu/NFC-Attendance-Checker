@@ -1,13 +1,19 @@
 package com.nezzar.nfcattendance.ui
 
 import android.app.Activity
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -51,7 +57,7 @@ import com.nezzar.nfcattendance.R
 import com.nezzar.nfcattendance.nfc.NfcState
 
 @Composable
-fun RegisterScreen(state: AppState, activity: Activity) {
+fun RegisterScreen(state: AppState, activity: Activity, modifier: Modifier = Modifier) {
     val view = LocalView.current
     val haptics = LocalHapticFeedback.current
     // AppRoot owns the reader and reports what the hardware is doing: one source of
@@ -94,7 +100,7 @@ fun RegisterScreen(state: AppState, activity: Activity) {
 
     LazyColumn(
         state = listState,
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -121,17 +127,23 @@ fun RegisterScreen(state: AppState, activity: Activity) {
                     SectionLabel("Reader")
                 }
                 Spacer(Modifier.height(6.dp))
-                Text(
-                    text = when (nfc) {
-                        NfcState.UNSUPPORTED ->
-                            "No NFC adapter on this device (an emulator never has one)."
-                        NfcState.DISABLED ->
-                            "NFC adapter is present but switched off in system settings."
-                        NfcState.ENABLED ->
-                            "Reader mode active - hold the ID card to the phone's NFC antenna."
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                val readerLine = when (nfc) {
+                    NfcState.UNSUPPORTED ->
+                        "No NFC adapter on this device (an emulator never has one)."
+                    NfcState.DISABLED ->
+                        "NFC adapter is present but switched off in system settings."
+                    NfcState.ENABLED ->
+                        "Reader mode active - hold the ID card to the phone's NFC antenna."
+                }
+                // The reader's sentence turns with the hardware, not with a tap:
+                // it cross-fades so the eye follows what changed.
+                Crossfade(
+                    targetState = readerLine,
+                    animationSpec = tween(MotionTouchMs, easing = EmphasizedDecelerate),
+                    label = "readerLine",
+                ) { line ->
+                    Text(text = line, style = MaterialTheme.typography.bodyMedium)
+                }
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     StatTile(
@@ -155,16 +167,16 @@ fun RegisterScreen(state: AppState, activity: Activity) {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     },
                     enabled = register.armed || section != null,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
                 ) {
-                    Text(if (register.armed) "Stop registering" else "Start registering")
+                    SwapLabel(if (register.armed) "Stop registering" else "Start registering")
                 }
                 if (section == null) {
                     Spacer(Modifier.height(8.dp))
                     Note("Create a section first, then register its students.")
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(
-                        onClick = { state.screen = Screen.SECTIONS },
+                        onClick = { state.closeOverlay() },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text("Go to Sections")
@@ -193,9 +205,10 @@ fun RegisterScreen(state: AppState, activity: Activity) {
 
         val pending = register.pendingUid
         if (pending != null) {
-            item(key = "pending") {
+            item(key = "pending", contentType = "liveCard") {
                 AnimatedVisibility(
                     visible = true,
+                    modifier = Modifier.animateItem(),
                     enter = slideInVertically(tween(MotionScreenMs, easing = EmphasizedDecelerate)) { it / 4 } +
                         fadeIn(tween(MotionTouchMs)),
                 ) {
@@ -263,16 +276,18 @@ fun RegisterScreen(state: AppState, activity: Activity) {
                 }
             }
         } else if (register.armed) {
-            item(key = "waiting") {
-                EmptyState(
-                    icon = R.drawable.ic_nav_register,
-                    title = "Waiting for a card",
-                    body = "Hold the student ID flat against the phone's NFC antenna.",
-                )
+            item(key = "waiting", contentType = "liveCard") {
+                Box(modifier = Modifier.animateItem()) {
+                    EmptyState(
+                        icon = R.drawable.ic_nav_register,
+                        title = "Waiting for a card",
+                        body = "Hold the student ID flat against the phone's NFC antenna.",
+                    )
+                }
             }
         } else {
-            item(key = "idle") {
-                BrandCard {
+            item(key = "idle", contentType = "liveCard") {
+                BrandCard(modifier = Modifier.animateItem()) {
                     Note("Not registering yet. Press Start registering, then tap a card.")
                 }
             }

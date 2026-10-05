@@ -12,9 +12,9 @@ import androidx.compose.ui.graphics.Color
  *   BrandPrimary       #22C55E  7.79:1
  *   BrandAmber         #EAB308  11.0:1 on #000000, 9.3:1 on #181818
  *
- * Light (measured on #FFFFFF cards / #FAFAFA page):
+ * Light (measured on #FFFFFF cards / #F1F2F4 page):
  *   LightOutline       #6B6B6B  5.33:1
- *   LightHairline      #E2E2E2  1.20:1 - decorative dividers only
+ *   LightHairline      #D9DBDF  1.27:1 - decorative dividers only
  *   LightTextSecondary #575757  7.23:1
  *   LightPrimary       #15803D  5.01:1 under white text, 4.80:1 as text on #FAFAFA
  */
@@ -52,10 +52,17 @@ val BrandHairline = Color(0xFF2E2E2E)
 val BrandError = Color(0xFFFF6B6B)
 
 // ------------------------------------------------------------------ light
-val LightBackground = Color(0xFFFAFAFA)
+/**
+ * A light grey page under white cards. The page used to be #FAFAFA with #F2F2F2
+ * cards, which left the cards floating with nothing to separate them; the page is a
+ * step darker and the card faces are white, so the same card art reads as paper.
+ */
+val LightBackground = Color(0xFFF1F2F4)
 val LightSurface = Color(0xFFFFFFFF)
-val LightSurfaceRaised = Color(0xFFF2F2F2)
-val LightSurfaceHigh = Color(0xFFE8E8E8)
+
+/** The card face, and every raised container in a light page. */
+val LightSurfaceRaised = Color(0xFFFFFFFF)
+val LightSurfaceHigh = Color(0xFFE9EAEC)
 
 /** A deeper green: the bright #22C55E cannot carry white text (2.2:1). */
 val LightPrimary = Color(0xFF15803D)
@@ -65,7 +72,7 @@ val LightOnPrimary = Color(0xFFFFFFFF)
 val LightTextPrimary = Color(0xFF171717)
 val LightTextSecondary = Color(0xFF575757)
 val LightOutline = Color(0xFF6B6B6B)
-val LightHairline = Color(0xFFE2E2E2)
+val LightHairline = Color(0xFFD9DBDF)
 val LightError = Color(0xFFB3261E)
 
 /** The same light on a light page: dark enough to stay visible, 4.3:1 on white. */

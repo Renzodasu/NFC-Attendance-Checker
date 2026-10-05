@@ -47,7 +47,7 @@ android {
 androidComponents {
     onVariants { variant ->
         variant.outputs.forEach { output ->
-            output.outputFileName.set("NFC-Attendance-Checker-$androidVersionName-${variant.name}.apk")
+            output.outputFileName.set("Presencia-NFC-$androidVersionName-${variant.name}.apk")
         }
     }
 }

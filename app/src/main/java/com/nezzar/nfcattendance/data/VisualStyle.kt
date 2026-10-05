@@ -15,7 +15,7 @@ enum class VisualStyle {
 
     companion object {
         fun fromStored(value: String): VisualStyle = when (value.lowercase()) {
-            "cards" -> CARDS
+            "plain" -> PLAIN
             "solids" -> SOLIDS
             else -> CARDS
         }

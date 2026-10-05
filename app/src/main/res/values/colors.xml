@@ -7,4 +7,10 @@
     <color name="brand_primary">#FF22C55E</color>
     <color name="brand_primary_pressed">#FF16A34A</color>
     <color name="brand_on_primary">#FF06210F</color>
+    <!-- The stock a card face is printed on, used by the launcher mark. -->
+    <color name="brand_card_face">#F7F2E9</color>
+    <!-- The launcher mark's glow, laid over brand_background: one radial
+         gradient, so the pool of light fades out with no rings left in it. -->
+    <color name="brand_glow_centre">#1822C55E</color>
+    <color name="brand_glow_edge">#0022C55E</color>
 </resources>

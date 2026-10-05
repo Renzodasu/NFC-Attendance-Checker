@@ -1,8 +1,16 @@
 package com.nezzar.nfcattendance.ui
 
 import android.app.Activity
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -69,73 +77,97 @@ fun ScanScreen(state: AppState, activity: Activity) {
                     SectionLabel("NFC reader")
                 }
                 Spacer(Modifier.height(6.dp))
-                Text(
-                    text = when {
-                        nfc == NfcState.UNSUPPORTED ->
-                            "No NFC adapter on this device (an emulator never has one)."
-                        nfc == NfcState.DISABLED ->
-                            "NFC adapter is present but switched off in system settings."
-                        state.paused ->
-                            "Paused - the reader is off and taps are ignored. Press Resume when the " +
-                                "class (or a late arrival) is ready."
-                        else ->
-                            "Reader mode active - hold each student ID to the phone's NFC antenna."
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                val readerLine = when {
+                    nfc == NfcState.UNSUPPORTED ->
+                        "No NFC adapter on this device (an emulator never has one)."
+                    nfc == NfcState.DISABLED ->
+                        "NFC adapter is present but switched off in system settings."
+                    state.paused ->
+                        "Paused - the reader is off and taps are ignored. Press Resume when the " +
+                            "class (or a late arrival) is ready."
+                    else ->
+                        "Reader mode active - hold each student ID to the phone's NFC antenna."
+                }
+                // The reader's sentence turns with the hardware and with Pause, not
+                // with a tap: it cross-fades so the eye follows what changed.
+                Crossfade(
+                    targetState = readerLine,
+                    animationSpec = tween(MotionTouchMs, easing = EmphasizedDecelerate),
+                    label = "readerLine",
+                ) { line ->
+                    Text(text = line, style = MaterialTheme.typography.bodyMedium)
+                }
                 Spacer(Modifier.height(12.dp))
                 KeyValueRow("Section", section?.name ?: "(none selected)")
                 KeyValueRow("Roster", state.roster.size.toString() + " registered")
                 Spacer(Modifier.height(12.dp))
-                if (!state.running) {
-                    Button(
-                        onClick = {
-                            state.startSession()
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        },
-                        enabled = state.roster.isNotEmpty(),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Start session")
-                    }
-                    // A disabled button with no reason reads as a broken app.
-                    if (state.roster.isEmpty()) {
-                        Spacer(Modifier.height(8.dp))
-                        Note(
-                            if (section == null) "Create a section first, then register its students."
-                            else "No students registered in " + section.name + " yet."
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedButton(
-                            onClick = {
-                                state.screen = if (section == null) Screen.SECTIONS else Screen.REGISTER
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(if (section == null) "Go to Sections" else "Go to Register")
-                        }
-                    }
-                } else {
-                    // Pause keeps the session open for the whole class: the reader
-                    // stops listening, late arrivals still get counted afterwards.
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Button(
-                            onClick = {
-                                state.togglePause()
-                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            },
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text(if (state.paused) "Resume" else "Pause")
-                        }
-                        OutlinedButton(
-                            onClick = {
-                                state.stopSession()
-                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            },
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text("End session")
+                AnimatedContent(
+                    targetState = state.running,
+                    transitionSpec = {
+                        (fadeIn(tween(MotionTouchMs, easing = EmphasizedDecelerate)) +
+                            slideInVertically(
+                                animationSpec = tween(MotionScreenMs, easing = EmphasizedDecelerate),
+                            ) { height -> height / 5 })
+                            .togetherWith(fadeOut(tween(140)))
+                    },
+                    label = "sessionActions",
+                ) { running ->
+                    Column {
+                        if (!running) {
+                            Button(
+                                onClick = {
+                                    state.startSession()
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                },
+                                enabled = state.roster.isNotEmpty(),
+                                modifier = Modifier.fillMaxWidth().height(54.dp),
+                            ) {
+                                Text("Start session")
+                            }
+                            // A disabled button with no reason reads as a broken app.
+                            if (state.roster.isEmpty()) {
+                                Spacer(Modifier.height(8.dp))
+                                Note(
+                                    if (section == null) "Create a section first, then register its students."
+                                    else "No students registered in " + section.name + " yet."
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                OutlinedButton(
+                                    onClick = {
+                                        if (section == null) {
+                                            state.screen = Screen.SECTIONS
+                                        } else {
+                                            state.openRegister()
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(if (section == null) "Go to Sections" else "Go to Register")
+                                }
+                            }
+                        } else {
+                            // Pause keeps the session open for the whole class: the reader
+                            // stops listening, late arrivals still get counted afterwards.
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Button(
+                                    onClick = {
+                                        state.togglePause()
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    },
+                                    modifier = Modifier.weight(1f).height(54.dp),
+                                ) {
+                                    SwapLabel(if (state.paused) "Resume" else "Pause")
+                                }
+                                OutlinedButton(
+                                    onClick = {
+                                        state.stopSession()
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    },
+                                    modifier = Modifier.weight(1f).height(54.dp),
+                                ) {
+                                    Text("End session")
+                                }
+                            }
                         }
                     }
                 }

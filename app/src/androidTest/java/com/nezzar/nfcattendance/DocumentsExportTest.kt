@@ -47,7 +47,7 @@ class DocumentsExportTest {
         val written = DocumentsExport.save(context, fileName) { out -> out.write(body) }
         try {
             assertTrue(written.uri.toString().startsWith("content://"))
-            assertEquals("/storage/emulated/0/Documents/NFC Attendance/" + fileName, written.displayPath)
+            assertEquals("/storage/emulated/0/Documents/Presencia/" + fileName, written.displayPath)
 
             val file = File(written.displayPath)
             assertTrue("the file must exist at " + written.displayPath, file.isFile)

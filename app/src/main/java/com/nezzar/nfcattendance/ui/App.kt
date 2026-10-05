@@ -14,9 +14,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -73,9 +76,9 @@ import com.nezzar.nfcattendance.nfc.NfcScanner
 import kotlinx.coroutines.launch
 
 /** Bottom-bar destinations, in the same order as [Screen]. */
+/** The three tabs. Registering is a page under the shelf, not a fourth one. */
 private enum class Destination(val label: String, val icon: Int, val blurb: String) {
     SECTIONS("Sections", R.drawable.ic_nav_sections, "Classes and their rosters"),
-    REGISTER("Register", R.drawable.ic_nav_register, "Add a student card"),
     SCAN("Scan", R.drawable.ic_nav_scan, "Take attendance"),
     REPORT("Report", R.drawable.ic_nav_report, "Result and export"),
 }
@@ -107,12 +110,15 @@ fun AppRoot(state: AppState, activity: Activity) {
     DisposableEffect(Unit) {
         onDispose { tone?.release() }
     }
-    DisposableEffect(state.screen, activity) {
-        if (state.screen == Screen.REGISTER || state.screen == Screen.SCAN) {
+    // Armed for the two pages that take taps: the Scan tab, and the register page
+    // (which lives under the shelf now, over the tabs).
+    val tapping = state.overlay == Overlay.REGISTER || state.screen == Screen.SCAN
+    DisposableEffect(tapping, activity) {
+        if (tapping) {
             scanner.start { bytes ->
                 val tapsBefore = state.session?.taps?.size ?: 0
                 val pendingBefore = state.registerState.pendingUid
-                if (state.screen == Screen.REGISTER) state.onRegisterTap(bytes) else state.onScanTap(bytes)
+                if (state.overlay == Overlay.REGISTER) state.onRegisterTap(bytes) else state.onScanTap(bytes)
                 val landed = (state.session?.taps?.size ?: 0) > tapsBefore ||
                     (pendingBefore == null && state.registerState.pendingUid != null)
                 if (landed) {
@@ -179,7 +185,16 @@ fun AppRoot(state: AppState, activity: Activity) {
             },
             bottomBar = {
                 // A page opens over the tabs on its own, so the bar would only be noise.
-                if (state.overlay == null) {
+                // It slides out with the page instead of vanishing between frames.
+                AnimatedVisibility(
+                    visible = state.overlay == null,
+                    enter = slideInVertically(
+                        animationSpec = tween(MotionScreenMs, easing = EmphasizedDecelerate),
+                    ) { height -> height } + fadeIn(tween(MotionTouchMs)),
+                    exit = slideOutVertically(
+                        animationSpec = tween(MotionTouchMs, easing = EmphasizedDecelerate),
+                    ) { height -> height } + fadeOut(tween(160)),
+                ) {
                     Column {
                         SessionBar(state)
                         BottomBar(state)
@@ -187,49 +202,79 @@ fun AppRoot(state: AppState, activity: Activity) {
                 }
             },
         ) { padding ->
-            val overlay = state.overlay
-            if (overlay != null) {
-                // imePadding lifts the page above the typing keyboard, and
-                // consumeWindowInsets stops it from paying for the system bar twice.
-                val body = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .consumeWindowInsets(padding)
-                    .imePadding()
-                when (overlay) {
-                    Overlay.SETTINGS -> SettingsScreen(state, body)
-                    Overlay.TUTORIAL -> TutorialScreen(state, body)
-                    Overlay.STUDENT -> StudentScreen(state, state.editingStudentUid ?: "", body)
-                    Overlay.ROSTER -> RosterScreen(state, body)
-                    Overlay.NEW_SECTION -> NewSectionScreen(state, body)
-                    Overlay.SECTION -> SectionScreen(state, body)
-                }
-            } else {
-                AnimatedContent(
-                    targetState = state.screen,
-                    transitionSpec = {
-                        val forward = targetState.ordinal > initialState.ordinal
-                        val direction = if (forward) 1 else -1
-                        val enter = slideInHorizontally(
+            val page = state.overlay
+            // imePadding lifts a page above the typing keyboard, and
+            // consumeWindowInsets stops it from paying for the system bar twice.
+            val body = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .consumeWindowInsets(padding)
+                .imePadding()
+            // Tabs and pages share one transition: a page rises over the tab that
+            // opened it while that tab steps back, and the reverse on the way home.
+            AnimatedContent(
+                targetState = page,
+                transitionSpec = {
+                    if (targetState != null) {
+                        val enter = slideInVertically(
                             animationSpec = tween(MotionScreenMs, easing = EmphasizedDecelerate),
-                        ) { width -> width * direction / 6 } + fadeIn(tween(MotionTouchMs))
-                        val exit = slideOutHorizontally(
-                            animationSpec = tween(MotionTouchMs),
-                        ) { width -> -width * direction / 8 } + fadeOut(tween(160))
-                        enter togetherWith exit
-                    },
-                    label = "tab",
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding)
-                        .consumeWindowInsets(padding)
-                        .imePadding(),
-                ) { screen ->
-                    when (screen) {
-                        Screen.SECTIONS -> SectionsScreen(state)
-                        Screen.REGISTER -> RegisterScreen(state, activity)
-                        Screen.SCAN -> ScanScreen(state, activity)
-                        Screen.REPORT -> ReportScreen(state)
+                        ) { height -> height / 7 } + fadeIn(tween(MotionScreenMs))
+                        val leave = scaleOut(
+                            animationSpec = tween(MotionScreenMs, easing = EmphasizedDecelerate),
+                            targetScale = 0.97f,
+                        ) + fadeOut(tween(MotionTouchMs))
+                        enter togetherWith leave
+                    } else {
+                        val enter = scaleIn(
+                            animationSpec = tween(MotionScreenMs, easing = EmphasizedDecelerate),
+                            initialScale = 0.97f,
+                        ) + fadeIn(tween(MotionScreenMs))
+                        val leave = slideOutVertically(
+                            animationSpec = tween(MotionTouchMs, easing = EmphasizedDecelerate),
+                        ) { height -> height / 7 } + fadeOut(tween(MotionTouchMs))
+                        enter togetherWith leave
+                    }
+                },
+                label = "page",
+                modifier = body,
+            ) { open ->
+                if (open == null) {
+                    AnimatedContent(
+                        targetState = state.screen,
+                        transitionSpec = {
+                            val forward = targetState.ordinal > initialState.ordinal
+                            val direction = if (forward) 1 else -1
+                            val enter = slideInHorizontally(
+                                animationSpec = tween(MotionScreenMs, easing = EmphasizedDecelerate),
+                            ) { width -> width * direction / 6 } + fadeIn(tween(MotionTouchMs))
+                            val exit = slideOutHorizontally(
+                                animationSpec = tween(MotionTouchMs),
+                            ) { width -> -width * direction / 8 } + fadeOut(tween(160))
+                            enter togetherWith exit
+                        },
+                        label = "tab",
+                        modifier = Modifier.fillMaxSize(),
+                    ) { screen ->
+                        when (screen) {
+                            Screen.SECTIONS -> SectionsScreen(state)
+                            Screen.SCAN -> ScanScreen(state, activity)
+                            Screen.REPORT -> ReportScreen(state)
+                        }
+                    }
+                } else {
+                    val pageModifier = Modifier.fillMaxSize()
+                    when (open) {
+                        Overlay.SETTINGS -> SettingsScreen(state, pageModifier)
+                        Overlay.TUTORIAL -> TutorialScreen(state, pageModifier)
+                        Overlay.STUDENT -> StudentScreen(
+                            state = state,
+                            uid = state.editingStudentUid ?: "",
+                            modifier = pageModifier,
+                        )
+                        Overlay.ROSTER -> RosterScreen(state, pageModifier)
+                        Overlay.NEW_SECTION -> NewSectionScreen(state, pageModifier)
+                        Overlay.SECTION -> SectionScreen(state, pageModifier)
+                        Overlay.REGISTER -> RegisterScreen(state, activity, pageModifier)
                     }
                 }
             }
@@ -254,6 +299,7 @@ private fun ShellHeader(state: AppState, onMenu: () -> Unit) {
         Overlay.ROSTER -> "Registered students"
         Overlay.NEW_SECTION -> "New section"
         Overlay.SECTION -> "Manage section"
+        Overlay.REGISTER -> "Register"
         null -> Destination.entries[state.screen.ordinal].label
     }
     Column {
@@ -269,16 +315,22 @@ private fun ShellHeader(state: AppState, onMenu: () -> Unit) {
                 }
             },
             title = {
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.titleLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (overlay == null) {
-                        Spacer(Modifier.width(10.dp))
-                        Pill(text = state.selectedSection?.name ?: "No section")
+                Crossfade(
+                    targetState = label,
+                    animationSpec = tween(MotionTouchMs, easing = EmphasizedDecelerate),
+                    label = "headerLabel",
+                ) { current ->
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = current,
+                            style = MaterialTheme.typography.titleLarge,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (overlay == null) {
+                            Spacer(Modifier.width(10.dp))
+                            Pill(text = state.selectedSection?.name ?: "No section")
+                        }
                     }
                 }
             },
@@ -287,14 +339,22 @@ private fun ShellHeader(state: AppState, onMenu: () -> Unit) {
                 // Save, which is where a form's save belongs.
                 val actionLabel = state.headerActionLabel
                 val action = state.headerAction
-                if (actionLabel != null && action != null) {
-                    TextButton(onClick = action) {
-                        Text(
-                            text = actionLabel,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                        )
+                AnimatedVisibility(
+                    visible = actionLabel != null && action != null,
+                    enter = fadeIn(tween(MotionTouchMs)) + slideInVertically(
+                        animationSpec = tween(MotionTouchMs, easing = EmphasizedDecelerate),
+                    ) { height -> -height / 2 },
+                    exit = fadeOut(tween(140)),
+                ) {
+                    if (actionLabel != null && action != null) {
+                        TextButton(onClick = action) {
+                            Text(
+                                text = actionLabel,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
             },
@@ -319,9 +379,9 @@ private fun AppDrawer(state: AppState, onClose: () -> Unit) {
         drawerContentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         Column(modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 28.dp, bottom = 16.dp)) {
-            Text("NFC Attendance", style = MaterialTheme.typography.headlineSmall)
+            Text("Presencia NFC", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.width(6.dp))
-            Note("Card taps, no accounts, no internet.")
+            Note("Tap your ID. Be Present.")
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
@@ -386,6 +446,7 @@ private fun BottomBar(state: AppState) {
                     Icon(
                         painter = painterResource(destination.icon),
                         contentDescription = destination.label,
+                        modifier = Modifier.size(28.dp),
                     )
                 },
                 label = { Text(destination.label) },
@@ -415,7 +476,7 @@ private fun SessionBar(state: AppState) {
 
     val ownedHere = when {
         running -> state.screen == Screen.SCAN || state.screen == Screen.REPORT
-        else -> state.screen == Screen.REGISTER
+        else -> state.overlay == Overlay.REGISTER
     }
     val visible = (running || registering) && !ownedHere
 
@@ -474,7 +535,7 @@ private fun SessionBar(state: AppState) {
                 }
                 TextButton(
                     onClick = {
-                        if (running) state.stopSession() else state.screen = Screen.REGISTER
+                        if (running) state.stopSession() else state.openRegister()
                     },
                 ) {
                     Text(if (running) "End session" else "Open")

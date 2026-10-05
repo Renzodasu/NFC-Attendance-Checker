@@ -7,6 +7,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import com.nezzar.nfcattendance.data.VisualStyle
+import com.nezzar.nfcattendance.ui.theme.isBrandDark
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
@@ -75,7 +76,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -95,13 +98,48 @@ fun SectionsScreen(state: AppState) {
     // Sections only: adding a class lives on its own page, reached from the button
     // beside the "Sections: n" label.
     val pagerState = rememberPagerState(pageCount = { state.sections.size })
-    val selected = state.selectedSection
     val listState = rememberLazyListState()
+
+    // A way to a class without swiping past twenty others: a search bar that
+    // unfolds where the shelf's own label sits. The shelf stays on the page while
+    // it is open, so the jump it makes can be watched.
+    var searching by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    val searchFocus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val needle = query.trim().lowercase()
+    val matches = if (needle.isEmpty()) {
+        emptyList()
+    } else {
+        state.sections.withIndex().filter { (_, section) ->
+            section.name.lowercase().contains(needle) ||
+                section.subject.lowercase().contains(needle) ||
+                faceLabel(section).lowercase().contains(needle)
+        }
+    }
+
+    // "Teleport": two cards away is a fast slide, anything further jumps outright,
+    // so reaching the thirtieth class never pages through the twenty-nine before it.
+    val jump: (Int) -> Unit = { page ->
+        scope.launch {
+            if (page in state.sections.indices) {
+                state.selectSection(state.sections[page].name)
+                if (kotlin.math.abs(page - pagerState.currentPage) <= 2) {
+                    pagerState.animateScrollToPage(
+                        page = page,
+                        animationSpec = tween(MotionTouchMs * 2, easing = EmphasizedDecelerate),
+                    )
+                } else {
+                    pagerState.scrollToPage(page)
+                }
+            }
+        }
+    }
 
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 32.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item(key = "title") {
@@ -126,17 +164,98 @@ fun SectionsScreen(state: AppState) {
 
         if (state.sections.isNotEmpty()) {
             item(key = "shelf-label") {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    SectionLabel("Sections: " + state.sections.size)
-                    Spacer(Modifier.weight(1f))
-                    OutlinedButton(onClick = { state.openNewSection() }) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_add),
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                        )
+                if (searching) {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = { Text("Search classes") },
+                        leadingIcon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_search),
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        },
+                        trailingIcon = {
+                            // Clears what was typed; on an empty bar it closes the search.
+                            IconButton(
+                                onClick = {
+                                    if (query.isEmpty()) searching = false else query = ""
+                                },
+                                modifier = Modifier.size(44.dp),
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_close),
+                                    contentDescription = "Clear the search",
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(50),
+                        modifier = Modifier.fillMaxWidth().focusRequester(searchFocus),
+                    )
+                    LaunchedEffect(searching) {
+                        searchFocus.requestFocus()
+                        keyboard?.show()
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SectionLabel("Sections: " + state.sections.size)
+                        Spacer(Modifier.weight(1f))
+                        IconButton(
+                            onClick = { searching = true },
+                            modifier = Modifier.size(46.dp),
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_search),
+                                contentDescription = "Search classes",
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
                         Spacer(Modifier.width(6.dp))
-                        Text("New section")
+                        OutlinedButton(
+                            onClick = { state.openNewSection() },
+                            modifier = Modifier.height(46.dp),
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_add),
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text("New section")
+                        }
+                    }
+                }
+            }
+
+            if (searching && needle.isNotEmpty()) {
+                item(key = "search-results") {
+                    BrandCard {
+                        if (matches.isEmpty()) {
+                            Note("No class matches \"" + query.trim() + "\".")
+                        } else {
+                            SectionLabel(matches.size.toString() + " of " +
+                                state.sections.size + " classes")
+                            Spacer(Modifier.height(4.dp))
+                            // Four is what fits above the shelf: typing narrows the
+                            // rest, and the shelf stays in sight for the jump.
+                            matches.take(4).forEach { (index, section) ->
+                                SearchRow(
+                                    section = section,
+                                    onClick = {
+                                        query = ""
+                                        searching = false
+                                        jump(index)
+                                    },
+                                )
+                            }
+                            if (matches.size > 4) {
+                                Spacer(Modifier.height(6.dp))
+                                Note("Keep typing - " + (matches.size - 4) + " more classes match.")
+                            }
+                        }
                     }
                 }
             }
@@ -162,7 +281,10 @@ fun SectionsScreen(state: AppState) {
                         val distance = ((pagerState.currentPage - page) +
                             pagerState.currentPageOffsetFraction)
                         val closeness = (1f - kotlin.math.abs(distance)).coerceIn(0f, 1f)
-                        val scale = 0.84f + 0.16f * closeness
+                        // Barely stepped back: the bigger the cards, the less room is
+                        // left for the next one to show, and that peek is how the shelf
+                        // says there is more than one class.
+                        val scale = 0.94f + 0.06f * closeness
                         // A plain Box, not a Surface: a Surface clips its content to
                         // its own rectangle, and that cut the chosen card's glow off
                         // at the card's edge.
@@ -190,19 +312,15 @@ fun SectionsScreen(state: AppState) {
                             } else {
                                 Modifier
                             }
-                            // The chosen card is the way into its own page, where the
-                            // class is renamed, given a subject, or deleted.
-                            val onManage: () -> Unit = {
-                                state.selectSection(section.name)
-                                state.openSection()
-                            }
+                            // The chosen card is selected by its own tap. Its two
+                            // actions - Register and Manage - are the buttons under the
+                            // shelf, where there is room to read them.
                             if (state.visualStyle == VisualStyle.PLAIN) {
                                 PlainSectionCard(
                                     section = section,
                                     selected = selected,
                                     modifier = placed,
                                     onSelect = onSelect,
-                                    onManage = onManage,
                                     glow = state.cardGlow,
                                     cardWidth = ShelfCardWidth,
                                     cardHeight = ShelfCardHeight,
@@ -214,7 +332,6 @@ fun SectionsScreen(state: AppState) {
                                     selected = selected,
                                     modifier = placed,
                                     onSelect = onSelect,
-                                    onManage = onManage,
                                     glow = state.cardGlow,
                                     cardWidth = ShelfCardWidth,
                                     cardHeight = ShelfCardHeight,
@@ -225,7 +342,6 @@ fun SectionsScreen(state: AppState) {
                                     selected = selected,
                                     modifier = placed,
                                     onSelect = onSelect,
-                                    onManage = onManage,
                                     glow = state.cardGlow,
                                     cardWidth = ShelfCardWidth,
                                     cardHeight = ShelfCardHeight,
@@ -237,37 +353,52 @@ fun SectionsScreen(state: AppState) {
             }
         }
 
-        if (selected != null) {
-            // One quiet row, not two cards: the list has its own page and that page
-            // carries the export, so there is no second button to explain up here.
-            item(key = "roster-open") {
-                val rosterInteraction = remember { MutableInteractionSource() }
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(18.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .pressScale(rosterInteraction)
-                        .cardClick(rosterInteraction, onClick = { state.openRoster() }),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+        // No roster row under the shelf: the card already says how many students are
+        // in the class, and the list has its own row on the section's own page.
+        //
+        // The shelf never filled the page, so the chosen class's two actions moved
+        // out of the card and into the room under it - side by side, so the page
+        // still ends without a scroll. The card keeps its tap: that is how it is
+        // chosen.
+        if (state.sections.isNotEmpty()) {
+            item(key = "actions") {
+                val section = state.selectedSection
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        onClick = {
+                            section?.let { state.selectSection(it.name) }
+                            state.openRegister()
+                        },
+                        enabled = section != null,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp),
                     ) {
-                        Text(
-                            text = when (selected.students.size) {
-                                0 -> "No students registered yet"
-                                1 -> "1 student in " + selected.name
-                                else -> selected.students.size.toString() + " students in " + selected.name
-                            },
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.weight(1f),
-                        )
                         Icon(
-                            painter = painterResource(R.drawable.ic_chevron),
-                            contentDescription = "Open all registered students",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            painter = painterResource(R.drawable.ic_nav_register),
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
                         )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Register")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            section?.let { state.selectSection(it.name) }
+                            state.openSection()
+                        },
+                        enabled = section != null,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp),
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_edit),
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Manage")
                     }
                 }
             }
@@ -275,16 +406,41 @@ fun SectionsScreen(state: AppState) {
     }
 }
 
+/**
+ * The chosen card's controls, along its bottom edge: Register opens the page that
+ * adds students to this class, Manage opens the class's own page.
+ */
+@Composable
+private fun CardChipRow(
+    accent: Color,
+    onManage: (() -> Unit)?,
+    onRegister: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (onRegister != null) {
+            CardChip(label = "Register", accent = accent, onClick = onRegister)
+        }
+        if (onManage != null) {
+            CardChip(label = "Manage", accent = accent, onClick = onManage)
+        }
+    }
+}
+
 /** A card face's own proportions: a playing card's 1 : 1.43. */
-private val FaceWidth = 200.dp
-private val FaceHeight = 286.dp
+private val FaceWidth = 228.dp
+private val FaceHeight = 326.dp
 
 /**
  * The shelf is where the classes live, so its cards are dealt this much bigger -
  * they take the room the shelf would otherwise leave empty above the tabs.
  */
-private val ShelfCardWidth = 260.dp
-private val ShelfCardHeight = 372.dp
+private val ShelfCardWidth = 310.dp
+private val ShelfCardHeight = 444.dp
 
 /**
  * A section card, retextured as a real playing card: ivory stock, the black or red
@@ -300,6 +456,7 @@ fun SectionCard(
     modifier: Modifier = Modifier,
     onSelect: () -> Unit,
     onManage: (() -> Unit)? = null,
+    onRegister: (() -> Unit)? = null,
     glow: CardGlow = CardGlow.Idle,
     cardWidth: Dp = FaceWidth,
     cardHeight: Dp = FaceHeight,
@@ -307,6 +464,7 @@ fun SectionCard(
     val interaction = remember { MutableInteractionSource() }
     val accent = MaterialTheme.colorScheme.primary
     val ink = accent
+    val dark = isBrandDark()
     val face = PlayingCards.rank(section.card)
     val suit = PlayingCards.suit(section.card)
 
@@ -343,7 +501,11 @@ fun SectionCard(
                         .size(cardWidth * 0.85f)
                         .background(
                             Brush.radialGradient(
-                                listOf(accent.copy(alpha = 0.16f), Color.Transparent)
+                                // A wash on black, a hint of tint on white.
+                                listOf(
+                                    accent.copy(alpha = if (dark) 0.16f else 0.06f),
+                                    Color.Transparent,
+                                )
                             ),
                             RoundedCornerShape(cardWidth * 0.425f),
                         ),
@@ -353,7 +515,9 @@ fun SectionCard(
                 // A quiet echo of the suit in the opposite corner, not a centrepiece.
                 Text(
                     text = suit,
-                    fontSize = 44.sp,
+                    // Scales with the card: a fixed 48 sp would swallow the date line
+                    // on the shorter face card the three tabs carry.
+                    fontSize = (cardHeight.value * 0.108f).sp,
                     color = ink.copy(alpha = if (selected) 0.30f else 0.10f),
                     modifier = Modifier.align(Alignment.BottomStart),
                 )
@@ -381,7 +545,7 @@ fun SectionCard(
                 Text(
                     text = section.name,
                     fontFamily = FontFamily.Serif,
-                    fontSize = 19.sp,
+                    fontSize = 22.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center,
@@ -392,7 +556,7 @@ fun SectionCard(
                     Spacer(Modifier.height(6.dp))
                     Text(
                         text = section.subject,
-                        fontSize = 13.sp,
+                        fontSize = 15.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                         maxLines = 2,
@@ -406,13 +570,13 @@ fun SectionCard(
             ) {
                 Text(
                     text = section.students.size.toString() + " registered",
-                    fontSize = 11.sp,
+                    fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = ReportBuilder.dateUpdatedText(section.updatedAt),
-                    fontSize = 11.sp,
+                    fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -421,18 +585,18 @@ fun SectionCard(
             if (selected) {
                 Text(
                     text = "SELECTED",
-                    fontSize = 10.sp,
-                    letterSpacing = 1.5.sp,
+                    fontSize = 12.sp,
+                    letterSpacing = 1.4.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.align(Alignment.TopEnd),
                 )
             }
-            if (selected && onManage != null) {
-                CardChip(
-                    label = "Manage",
+            if (selected && (onManage != null || onRegister != null)) {
+                CardChipRow(
                     accent = MaterialTheme.colorScheme.primary,
-                    onClick = onManage,
+                    onManage = onManage,
+                    onRegister = onRegister,
                     modifier = Modifier.align(Alignment.BottomCenter),
                 )
             }
@@ -452,6 +616,7 @@ fun PlainSectionCard(
     modifier: Modifier = Modifier,
     onSelect: () -> Unit,
     onManage: (() -> Unit)? = null,
+    onRegister: (() -> Unit)? = null,
     glow: CardGlow = CardGlow.Idle,
     cardWidth: Dp = FaceWidth,
     cardHeight: Dp = FaceHeight,
@@ -505,7 +670,7 @@ fun PlainSectionCard(
                     Spacer(Modifier.weight(1f))
                     Text(
                         text = if (selected) "SELECTED" else "SHEET",
-                        fontSize = 9.sp,
+                        fontSize = 11.sp,
                         letterSpacing = 1.4.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = if (selected) MaterialTheme.colorScheme.primary else ink.copy(alpha = 0.5f),
@@ -515,7 +680,7 @@ fun PlainSectionCard(
                 Text(
                     text = section.name,
                     fontFamily = FontFamily.Serif,
-                    fontSize = 20.sp,
+                    fontSize = 22.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = ink,
                     maxLines = 2,
@@ -525,7 +690,7 @@ fun PlainSectionCard(
                     Spacer(Modifier.height(6.dp))
                     Text(
                         text = section.subject,
-                        fontSize = 13.sp,
+                        fontSize = 15.sp,
                         color = ink.copy(alpha = 0.7f),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
@@ -541,13 +706,13 @@ fun PlainSectionCard(
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = section.students.size.toString() + " registered",
-                    fontSize = 11.sp,
+                    fontSize = 13.sp,
                     color = ink.copy(alpha = 0.62f),
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = ReportBuilder.dateUpdatedText(section.updatedAt),
-                    fontSize = 11.sp,
+                    fontSize = 13.sp,
                     color = ink.copy(alpha = 0.55f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -555,11 +720,11 @@ fun PlainSectionCard(
                 // Room for the Manage chip that sits over the bottom edge of the sheet.
                 Spacer(Modifier.height(26.dp))
             }
-            if (selected && onManage != null) {
-                CardChip(
-                    label = "Manage",
+            if (selected && (onManage != null || onRegister != null)) {
+                CardChipRow(
                     accent = MaterialTheme.colorScheme.primary,
-                    onClick = onManage,
+                    onManage = onManage,
+                    onRegister = onRegister,
                     modifier = Modifier.align(Alignment.BottomCenter),
                 )
             }
@@ -580,12 +745,14 @@ fun SolidSectionCard(
     modifier: Modifier = Modifier,
     onSelect: () -> Unit,
     onManage: (() -> Unit)? = null,
+    onRegister: (() -> Unit)? = null,
     glow: CardGlow = CardGlow.Idle,
     cardWidth: Dp = FaceWidth,
     cardHeight: Dp = FaceHeight,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val accent = MaterialTheme.colorScheme.primary
+    val dark = isBrandDark()
     val shape = Solids.of(index)
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -617,7 +784,11 @@ fun SolidSectionCard(
                         .size(cardWidth * 0.6f)
                         .background(
                             Brush.radialGradient(
-                                listOf(accent.copy(alpha = 0.18f), Color.Transparent)
+                                // A wash on black, a hint of tint on white.
+                                listOf(
+                                    accent.copy(alpha = if (dark) 0.18f else 0.07f),
+                                    Color.Transparent,
+                                )
                             ),
                             RoundedCornerShape(cardWidth * 0.3f),
                         ),
@@ -625,7 +796,7 @@ fun SolidSectionCard(
             }
             Text(
                 text = shape.uppercase(),
-                fontSize = 9.sp,
+                fontSize = 11.sp,
                 letterSpacing = 1.6.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = accent.copy(alpha = if (selected) 1f else 0.7f),
@@ -644,7 +815,7 @@ fun SolidSectionCard(
                 Text(
                     text = section.name,
                     fontFamily = FontFamily.Serif,
-                    fontSize = 19.sp,
+                    fontSize = 22.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
@@ -653,7 +824,7 @@ fun SolidSectionCard(
                 if (section.subject.isNotBlank()) {
                     Text(
                         text = section.subject,
-                        fontSize = 12.sp,
+                        fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -661,18 +832,26 @@ fun SolidSectionCard(
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = section.students.size.toString() + " registered  ·  updated " +
-                        ReportBuilder.dateUpdatedText(section.updatedAt),
-                    fontSize = 10.sp,
+                    text = section.students.size.toString() + " registered",
+                    fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = "updated " + ReportBuilder.dateUpdatedText(section.updatedAt),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (selected && onManage != null) {
-                CardChip(
-                    label = "Manage",
+            if (selected && (onManage != null || onRegister != null)) {
+                CardChipRow(
                     accent = accent,
-                    onClick = onManage,
+                    onManage = onManage,
+                    onRegister = onRegister,
                     modifier = Modifier.align(Alignment.BottomCenter),
                 )
             }
@@ -681,29 +860,6 @@ fun SolidSectionCard(
 }
 
 /** One corner index: rank over suit, mirrored into the far corner by rotation. */
-@Composable
-private fun CardIndex(
-    face: String,
-    suit: String,
-    ink: Color,
-    rotation: Float,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier.rotate(rotation),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = face,
-            fontFamily = FontFamily.Serif,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            color = ink,
-        )
-        Text(text = suit, fontSize = 16.sp, color = ink)
-    }
-}
-
 /**
  * The action a chosen class card carries, drawn on the card itself: Manage opens
  * the class's own page. Only the chosen card shows it, so the shelf stays quiet
@@ -723,21 +879,80 @@ private fun CardChip(
         shape = RoundedCornerShape(50),
         border = BorderStroke(1.dp, accent.copy(alpha = 0.6f)),
         modifier = modifier
-            .height(28.dp)
+            .height(34.dp)
             .pressScale(interaction, pressed = 0.94f)
             .cardClick(interaction, onClick = onClick),
     ) {
         Box(
-            modifier = Modifier.padding(horizontal = 12.dp),
+            modifier = Modifier.padding(horizontal = 14.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = label,
-                fontSize = 11.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = 0.6.sp,
             )
         }
+    }
+}
+
+/** The face a class was dealt, printed the way the card prints it. */
+private fun faceLabel(section: Section): String = if (section.card.isBlank()) {
+    ""
+} else {
+    PlayingCards.rank(section.card) + PlayingCards.suit(section.card)
+}
+
+/**
+ * One line of a search result: the class's face, its name, its subject and its
+ * roster size. Tapping the line jumps the shelf to that class.
+ */
+@Composable
+private fun SearchRow(section: Section, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .pressScale(interaction, pressed = 0.98f)
+            .cardClick(interaction, onClick = onClick),
+    ) {
+        Text(
+            text = faceLabel(section).ifEmpty { "—" },
+            fontFamily = FontFamily.Serif,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+            maxLines = 1,
+            modifier = Modifier.width(46.dp),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = section.name,
+                fontSize = 17.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = when {
+                    section.subject.isBlank() -> section.students.size.toString() + " registered"
+                    else -> section.subject + "  ·  " + section.students.size + " registered"
+                },
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Icon(
+            painter = painterResource(R.drawable.ic_chevron),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(16.dp),
+        )
     }
 }
 

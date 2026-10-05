@@ -106,7 +106,7 @@ fun ReportScreen(state: AppState) {
                 BrandCard(modifier = Modifier.animateContentSize()) {
                     Button(
                         onClick = { state.exportReport() },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().height(54.dp),
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_export),

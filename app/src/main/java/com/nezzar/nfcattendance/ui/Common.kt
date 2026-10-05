@@ -20,7 +20,9 @@ import androidx.compose.foundation.background
 
 import androidx.compose.foundation.Canvas
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Spring
@@ -29,11 +31,15 @@ import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -65,8 +71,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.nezzar.nfcattendance.R
 import kotlinx.coroutines.delay
@@ -282,11 +291,17 @@ fun KeyValueRow(label: String, value: String, valueStyle: TextStyle? = null) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(0.46f),
         )
-        Text(
-            text = value,
-            style = valueStyle ?: MaterialTheme.typography.bodyMedium,
+        Crossfade(
+            targetState = value,
+            animationSpec = tween(durationMillis = MotionTouchMs, easing = EmphasizedDecelerate),
+            label = "keyValue",
             modifier = Modifier.weight(0.54f),
-        )
+        ) { current ->
+            Text(
+                text = current,
+                style = valueStyle ?: MaterialTheme.typography.bodyMedium,
+            )
+        }
     }
 }
 
@@ -296,40 +311,69 @@ fun KeyValueRow(label: String, value: String, valueStyle: TextStyle? = null) {
  */
 @Composable
 fun ExportResult(path: String?, note: String?, onShare: (() -> Unit)?) {
-    if (path != null) {
-        Spacer(Modifier.height(12.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                painter = painterResource(R.drawable.ic_check),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(Modifier.width(10.dp))
+    // The card grows into its result instead of blinking it on: an export is
+    // read at arm's length, in the middle of a class.
+    AnimatedVisibility(
+        visible = path != null,
+        enter = fadeIn(tween(MotionTouchMs)) +
+            slideInVertically(tween(MotionScreenMs, easing = EmphasizedDecelerate)) { it / 3 },
+    ) {
+        if (path != null) {
             Column {
-                Text(text = path.substringAfterLast('/'), style = MaterialTheme.typography.bodyLarge)
-                Note("Saved in " + path.substringBeforeLast('/').substringAfterLast('/') + ".")
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_check),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Text(text = path.substringAfterLast('/'), style = MaterialTheme.typography.bodyLarge)
+                        Note("Saved in " + path.substringBeforeLast('/').substringAfterLast('/') + ".")
+                    }
+                }
             }
         }
     }
-    if (note != null) {
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "Export note: " + note,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.error,
-        )
+    AnimatedVisibility(
+        visible = note != null,
+        enter = fadeIn(tween(MotionTouchMs)) +
+            slideInVertically(tween(MotionScreenMs, easing = EmphasizedDecelerate)) { it / 3 },
+    ) {
+        if (note != null) {
+            Column {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Export note: " + note,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
     }
-    if (onShare != null) {
-        Spacer(Modifier.height(12.dp))
-        OutlinedButton(onClick = onShare, modifier = Modifier.fillMaxWidth()) {
-            Icon(
-                painter = painterResource(R.drawable.ic_share),
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text("Share this .xlsx")
+    AnimatedVisibility(
+        visible = onShare != null,
+        enter = fadeIn(tween(MotionTouchMs)) +
+            slideInVertically(tween(MotionScreenMs, easing = EmphasizedDecelerate)) { it / 3 },
+    ) {
+        if (onShare != null) {
+            Column {
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = onShare,
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_share),
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Share this .xlsx")
+                }
+            }
         }
     }
 }
@@ -393,22 +437,31 @@ fun EmptyState(
         }
         if (actionLabel != null && onAction != null) {
             Spacer(Modifier.height(14.dp))
-            OutlinedButton(onClick = onAction) { Text(actionLabel) }
+            OutlinedButton(
+                onClick = onAction,
+                modifier = Modifier.height(50.dp),
+            ) { Text(actionLabel) }
         }
     }
 }
 
 /** Status line that cross-fades instead of repainting. */
 @Composable
-fun AnimatedStatusLine(text: String, emphasise: Boolean) {
-    androidx.compose.animation.Crossfade(
+fun AnimatedStatusLine(
+    text: String,
+    emphasise: Boolean,
+    style: TextStyle = MaterialTheme.typography.bodyLarge,
+    modifier: Modifier = Modifier,
+) {
+    Crossfade(
         targetState = text,
-        animationSpec = tween(durationMillis = 220),
+        animationSpec = tween(durationMillis = MotionTouchMs, easing = EmphasizedDecelerate),
         label = "status",
+        modifier = modifier,
     ) { value ->
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyLarge,
+            style = style,
             color = if (emphasise) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
         )
     }
@@ -439,4 +492,64 @@ fun CardActionRow(content: @Composable () -> Unit) {
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) { content() }
+}
+
+/**
+ * A short list of facts, each behind a quiet dot. A line may lead with
+ * "Lead - detail": the lead is drawn in the fuller ink and the rest dimmed, so a
+ * bullet can be skimmed without being read twice.
+ */
+@Composable
+fun Points(lines: List<String>, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        lines.forEach { line ->
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "•",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.width(14.dp),
+                )
+                Text(
+                    text = buildAnnotatedString {
+                        val split = line.indexOf(" - ")
+                        if (split <= 0) {
+                            append(line)
+                        } else {
+                            withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurface)) {
+                                append(line.take(split))
+                            }
+                            append(line.substring(split))
+                        }
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * A label that swaps itself instead of switching: Start / Pause / End read as one
+ * control changing its mind, not as three different buttons.
+ */
+@Composable
+fun SwapLabel(text: String, modifier: Modifier = Modifier) {
+    AnimatedContent(
+        targetState = text,
+        transitionSpec = {
+            (fadeIn(tween(MotionTouchMs, easing = EmphasizedDecelerate)) +
+                slideInVertically(tween(MotionTouchMs, easing = EmphasizedDecelerate)) { it / 2 })
+                .togetherWith(
+                    fadeOut(tween(140)) +
+                        slideOutVertically(tween(140)) { -it / 2 }
+                )
+        },
+        label = "swapLabel",
+        modifier = modifier,
+    ) { current ->
+        Text(text = current, maxLines = 1)
+    }
 }

@@ -95,13 +95,13 @@ fun StudentScreen(state: AppState, uid: String, modifier: Modifier = Modifier) {
                                 state.renameStudent(uid, name)
                                 if (state.sectionsError.isEmpty()) state.closeOverlay()
                             },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).height(52.dp),
                         ) {
                             Text("Save name")
                         }
                         OutlinedButton(
                             onClick = { state.closeOverlay() },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).height(52.dp),
                         ) {
                             Text("Cancel")
                         }

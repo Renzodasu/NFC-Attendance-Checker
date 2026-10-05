@@ -1,8 +1,13 @@
-# NFC Attendance Checker
+# Presencia — NFC Attendance Checker
+
+<img src="docs/screenshots/icon.png" width="140" alt="Presencia NFC: a tilted playing card with a tick and the near-field signal">
+
+**Tap your ID. Be Present.**
 
 An offline Android app for taking class attendance by tapping student ID cards.
 Built for a class beadle: one roster per class, tap each card once, export the
-session as an Excel workbook.
+session as an Excel workbook. The app ships as **Presencia NFC**; the repository
+keeps its original name.
 
 **No server. No network permission. No student numbers** - a student is a name
 and a card UID, nothing else.
@@ -10,7 +15,9 @@ and a card UID, nothing else.
 ## What it does
 
 - **Sections** - one card per class, each with its own subject and roster. The
-  shelf is a centred carousel; the middle card is the selected class.
+  shelf is a centred carousel; the middle card is the selected class, and the
+  magnifier beside *New section* searches the shelf by class name, subject or
+  card face and brings a match to the middle.
 - **Register** - tap an ID card, type the name, save. A card already on the
   roster updates its name instead of adding a second row.
 - **Scan** - tap each card once per session. A repeat read inside 3 seconds
@@ -20,7 +27,7 @@ and a card UID, nothing else.
 - **Report** - absent list first, then late, then present, then unmatched
   cards. Every row carries the date and time of the read.
 - **Export / Import** - write the report or the roster to `.xlsx` in the shared
-  `Documents/NFC Attendance` folder, and import a roster another phone
+  `Documents/Presencia` folder, and import a roster another phone
   exported. Rows merge by card UID; the subject travels with the file.
 
 ## Section styles
@@ -42,8 +49,13 @@ the tabs that work with a section.
 
 ## Screens
 
-![New section](docs/screenshots/new-section.png)
-![Register](docs/screenshots/register.png)
+| New section | Register |
+| --- | --- |
+| ![New section: name the class, write its subject, pick a card face](docs/screenshots/new-section.png) | ![Register: tap an ID card, type the name, save](docs/screenshots/register.png) |
+
+| Scan | Report |
+| --- | --- |
+| ![Scan: start a session and tap each ID once](docs/screenshots/scan.png) | ![Report: the absent-first result, ready to export](docs/screenshots/report.png) |
 
 Also included: a registered-students page for the full roster with per-student
 standing, a full-screen student editor, a sidebar with Settings and the
@@ -54,7 +66,7 @@ scan feedback (haptics strength and a beep on read).
 
 Names and card UIDs live in this app's private storage only. The app has no
 network permission, so nothing can be uploaded. The only data that leaves the
-device is what you export yourself into `Documents/NFC Attendance`. The RA 10173
+device is what you export yourself into `Documents/Presencia`. The RA 10173
 privacy paragraph is shown in the app.
 
 ## Build

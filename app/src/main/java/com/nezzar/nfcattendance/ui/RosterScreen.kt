@@ -90,7 +90,7 @@ fun RosterScreen(state: AppState, modifier: Modifier = Modifier) {
                     title = "No students registered yet",
                     body = "Open Register, tap a student ID, and type the name it belongs to.",
                     actionLabel = "Go to Register",
-                    onAction = { state.closeOverlay(); state.screen = Screen.REGISTER },
+                    onAction = { state.closeOverlay(); state.openRegister() },
                 )
             }
         } else {
@@ -100,7 +100,7 @@ fun RosterScreen(state: AppState, modifier: Modifier = Modifier) {
                     Spacer(Modifier.height(10.dp))
                     Button(
                         onClick = { state.exportRoster() },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().height(54.dp),
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_export),

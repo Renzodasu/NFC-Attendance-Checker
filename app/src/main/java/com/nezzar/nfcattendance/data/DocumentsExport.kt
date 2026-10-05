@@ -20,12 +20,12 @@ import java.io.OutputStream
 object DocumentsExport {
 
     const val MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    const val FOLDER = "NFC Attendance"
+    const val FOLDER = "Presencia"
 
     /** What was written, so the UI can show the path and offer a Share button. */
     data class Written(val uri: Uri, val displayPath: String)
 
-    /** The readable path shown on screen, e.g. /storage/emulated/0/Documents/NFC Attendance/x.xlsx */
+    /** The readable path shown on screen, e.g. /storage/emulated/0/Documents/Presencia/x.xlsx */
     fun displayPath(fileName: String): String {
         val root = Environment.getExternalStorageDirectory().absolutePath
         return root + "/" + Environment.DIRECTORY_DOCUMENTS + "/" + FOLDER + "/" + fileName
@@ -37,7 +37,7 @@ object DocumentsExport {
     private fun folder(): String = Environment.DIRECTORY_DOCUMENTS + "/" + FOLDER + "/"
 
     /**
-     * MediaStore write into Documents/NFC Attendance. Earlier copies of the same
+     * MediaStore write into Documents/Presencia. Earlier copies of the same
      * export - including the "(1)" names MediaStore invents when an old copy is
      * still on disk - are removed first, so the folder keeps exactly one file per
      * export instead of stacking duplicates. Throws when the write fails; the
@@ -82,7 +82,7 @@ object DocumentsExport {
     }
 
     /**
-     * Deletes the rows in Documents/NFC Attendance whose name is this export's
+     * Deletes the rows in Documents/Presencia whose name is this export's
      * name or the "(n)" variant of it. Listing and deleting row by row keeps a
      * row this install does not own from aborting the whole sweep.
      */

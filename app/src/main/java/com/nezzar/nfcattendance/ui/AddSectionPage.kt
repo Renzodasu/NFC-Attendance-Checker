@@ -137,7 +137,7 @@ fun NewSectionScreen(state: AppState, modifier: Modifier = Modifier) {
                         if (state.sectionsError.isEmpty()) state.closeOverlay()
                     },
                     enabled = heldBy == null,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
                 ) {
                     Text("Create section")
                 }

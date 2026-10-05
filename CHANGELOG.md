@@ -4,6 +4,55 @@ All notable changes to NFC Attendance Checker. This project follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and uses date-based
 versions in the form `0.0.N`.
 
+## [0.0.3] - 2026-10-05
+
+### Added
+
+- **A name of its own.** The app is now **Presencia: NFC Attendance Checker**
+  (`Presencia NFC` inside the app), and exports go to the shared
+  `Documents/Presencia` folder. The rename covers the launcher label, the
+  sidebar title, the Settings rows, the export path and the APK file name.
+- **A new mark.** The launcher icon is a tilted playing card carrying a tick,
+  with the near-field signal stepping off its top-right corner and
+  **ATTENDANCE** across the bottom. The vector is drawn by
+  `app/build/nfc-artifacts/make_launcher_icons.py`, which also renders the five
+  legacy bitmap densities, so the adaptive icon and the bitmaps cannot drift.
+- **Search on the Sections tab** - the magnifier beside *New section* opens a
+  bar that filters classes by name, subject or card face. A tap on a result
+  brings that class to the middle of the shelf and makes it the selected one.
+- **An NFC status light** - the reader line carries a dot: green with a soft
+  glow while the reader is on, amber while it is off, and dark when the device
+  has no reader at all. The sentence next to it and the dot read from one piece
+  of state, so they can never disagree.
+- **Card faces by name** - a face picker that lists the 52 cards in words, for
+  choosing a class's face by hand.
+- **First-launch tutorial rewritten** as a swipeable, tilted card deck that can
+  be skipped, and never shown twice.
+
+### Changed
+
+- **The section cards were redrawn** for both themes: the light-theme wash over
+  every card is gone, the suit watermark now scales with the card instead of
+  colliding with the date, and the Solids caption no longer clips mid-date.
+- **Type and touch targets are larger** throughout, and every tab, card and
+  button animates in and out instead of snapping.
+- Light mode was rebuilt around its own palette (a `#F1F2F4` page, `#FFFFFF`
+  raised surfaces, `#E9EAEC` high surfaces, `#D9DBDF` hairlines) instead of
+  reusing the dark theme's greys.
+- The Scan tab leads with the selected class drawn full size - the same card as
+  the shelf - above the reader state.
+
+### Fixed
+
+- The glow behind the selected class's card was clipped at the card's own
+  bounds, so it read as a hard band instead of a pool of light.
+- The class name and details on the dark card style were painted in the old
+  ivory-era ink and were nearly invisible.
+- The **Plain** section style did not survive a restart: choosing it stored
+  `plain`, but the reader only understood `cards` and `solids`, so the app came
+  back wearing card faces. Every style now reads back as itself, and a unit test
+  holds that door shut.
+
 ## [0.0.2] - 2026-10-04
 
 ### Added

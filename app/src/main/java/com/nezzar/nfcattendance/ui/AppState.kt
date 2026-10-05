@@ -38,10 +38,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-enum class Screen { SECTIONS, REGISTER, SCAN, REPORT }
+enum class Screen { SECTIONS, SCAN, REPORT }
 
 /** A full-screen page that opens over the tabs (from the sidebar, never a tab itself). */
-enum class Overlay { SETTINGS, TUTORIAL, STUDENT, ROSTER, NEW_SECTION, SECTION }
+enum class Overlay { SETTINGS, TUTORIAL, STUDENT, ROSTER, NEW_SECTION, SECTION, REGISTER }
 
 /** The raw and byte-reversed readings, shown side by side while calibrating. */
 data class RecentTap(val asRead: String, val reversed: String)
@@ -348,6 +348,14 @@ class AppState(context: Context) {
     fun openSection() {
         overlay = Overlay.SECTION
         sectionsError = ""
+    }
+
+    /**
+     * Registering is a page under the shelf now, not a fourth tab: the Register
+     * control on a section card opens it for that class.
+     */
+    fun openRegister() {
+        overlay = Overlay.REGISTER
     }
 
     /** Every registered card of the selected section, on one page of its own. */

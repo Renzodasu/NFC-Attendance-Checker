@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The themed-icon layer: the same card, tick, corner marks, signal and caption
+  as line art, so the system can tint it. Monochrome layers keep alpha only, so
+  the card is an outline while the tick, the marks and the signal are solid.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:pivotX="48.5"
+        android:pivotY="49.5"
+        android:rotation="-12">
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M41,35 H56.5 A3,3 0 0 1 59,38 V61 A3,3 0 0 1 56.5,64 H41 A3,3 0 0 1 38,61 V38 A3,3 0 0 1 41,35 Z"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="2.6" />
+        <path
+            android:fillColor="#00000000"
+            android:pathData="MM41.5,51 L45.5,55.5 L55,43.5"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="3.6"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M41,38 L42.9,40.5 L41,43 L39.1,40.5 Z" />
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M56,56 L57.9,58.5 L56,61 L54.1,58.5 Z" />
+    </group>
+    <group
+        android:pivotX="63.5"
+        android:pivotY="30.5"
+        android:rotation="-45">
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M63.5,27.9a2.6,2.6 0 0 1 0,5.2"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="1.6"
+            android:strokeLineCap="round" />
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M63.5,25.5a5,5 0 0 1 0,10"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="1.6"
+            android:strokeLineCap="round" />
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M63.5,23.1a7.4,7.4 0 0 1 0,14.8"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="1.6"
+            android:strokeLineCap="round" />
+    </group>
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M30.4,76 L31.95,72 L33.5,76 M31.18,74 L32.72,74 M35.3,72 L38.4,72 M36.85,72 L36.85,76 M40.2,72 L43.3,72 M41.75,72 L41.75,76 M48.2,72 L45.1,72 L45.1,76 L48.2,76 M45.1,74 L47.7,74 M50,76 L50,72 L53.1,76 L53.1,72 M54.9,72 L54.9,76 M54.9,72 L55.9,72 M54.9,76 L55.9,76 M59.8,76 L61.35,72 L62.9,76 M60.58,74 L62.12,74 M64.7,76 L64.7,72 L67.8,76 L67.8,72 M77.6,72 L74.5,72 L74.5,76 L77.6,76 M74.5,74 L77.1,74 M55.9,72 A2.1,2 0 0 1 55.9,76 M72.7,72 A2.6,2 0 0 0 72.7,76"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

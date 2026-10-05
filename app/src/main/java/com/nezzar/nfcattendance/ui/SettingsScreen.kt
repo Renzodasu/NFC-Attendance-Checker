@@ -100,10 +100,12 @@ fun SettingsScreen(state: AppState, modifier: Modifier = Modifier) {
                     }
                 }
                 Spacer(Modifier.height(10.dp))
-                Note(
-                    "Minutes after the session start that still count as present. A card read after " +
-                        "that is counted too, but marked late - which is why the session can be paused " +
-                        "and left open for the rest of the class."
+                Points(
+                    listOf(
+                        "Present - a card read in the first " + state.lateAfterMinutes + " minutes.",
+                        "Late - a card read after that. It still counts, it is only marked.",
+                        "Pause instead of ending: the session stays open, so latecomers are still tapped.",
+                    )
                 )
             }
         }
@@ -133,12 +135,12 @@ fun SettingsScreen(state: AppState, modifier: Modifier = Modifier) {
                     }
                 }
                 Spacer(Modifier.height(10.dp))
-                Note(
-                    "Cards is the default: every class is dealt a face from a 52-card deck, " +
-                        "drawn dark and subtle with green shapes. Plain is the civil engineering " +
-                        "sheet - a drafting grid with a truss mark and a title block. Solids gives " +
-                        "each class a wireframe polyhedron - prism, cube, octahedron, icosahedron " +
-                        "and so on."
+                Points(
+                    listOf(
+                        "Cards - a face from a 52-card deck, drawn dark with green shapes. The default.",
+                        "Plain - the civil engineering sheet: a drafting grid, a truss mark, a title block.",
+                        "Solids - a wireframe polyhedron each: prism, cube, octahedron, icosahedron.",
+                    )
                 )
             }
         }
@@ -191,9 +193,11 @@ fun SettingsScreen(state: AppState, modifier: Modifier = Modifier) {
                     )
                 }
                 Spacer(Modifier.height(10.dp))
-                Note(
-                    "Vibration rides the phone's own haptic feedback, so it asks for no extra " +
-                        "permission. The beep is a single short tone, played only when a card is read."
+                Points(
+                    listOf(
+                        "Vibration rides the phone's own haptics, so it asks for no extra permission.",
+                        "The beep is one short tone, played only when a card is read.",
+                    )
                 )
             }
         }
@@ -214,9 +218,11 @@ fun SettingsScreen(state: AppState, modifier: Modifier = Modifier) {
                     )
                 }
                 Spacer(Modifier.height(8.dp))
-                Note(
-                    "Android can print a card's UID in either byte order. Tap a card on the Scan tab " +
-                        "and pick whichever reading below matches your roster."
+                Points(
+                    listOf(
+                        "Android can print a card's UID in either byte order.",
+                        "Tap a card on the Scan tab, then pick the reading below that matches your roster.",
+                    )
                 )
                 Spacer(Modifier.height(8.dp))
                 if (state.recentTaps.isEmpty()) {
@@ -239,11 +245,13 @@ fun SettingsScreen(state: AppState, modifier: Modifier = Modifier) {
                 Spacer(Modifier.height(10.dp))
                 KeyValueRow("Sections", state.sections.size.toString())
                 KeyValueRow("Registered students", cards.toString())
-                KeyValueRow("Exports", "Documents/NFC Attendance")
+                KeyValueRow("Exports", "Documents/Presencia")
                 Spacer(Modifier.height(8.dp))
-                Note(
-                    "Names and card UIDs live in this app's private storage only. There is no server " +
-                        "and no network permission, so nothing is uploaded."
+                Points(
+                    listOf(
+                        "Names and card UIDs live in this app's private storage only.",
+                        "No server, and no network permission - nothing is uploaded.",
+                    )
                 )
             }
         }
@@ -274,13 +282,15 @@ fun SettingsScreen(state: AppState, modifier: Modifier = Modifier) {
             BrandCard {
                 SectionLabel("About")
                 Spacer(Modifier.height(8.dp))
-                KeyValueRow("App", "NFC Attendance Checker")
+                KeyValueRow("App", "Presencia NFC")
                 KeyValueRow("Version", BuildConfig.VERSION_NAME)
                 KeyValueRow("Works without", "Internet, account, login")
                 Spacer(Modifier.height(8.dp))
-                Note(
-                    "Students are identified by card UID and name only - no student number is ever " +
-                        "recorded (RA 10173)."
+                Points(
+                    listOf(
+                        "A student is a card UID and a name. Nothing else is kept.",
+                        "No student number is ever recorded (RA 10173).",
+                    )
                 )
             }
         }
