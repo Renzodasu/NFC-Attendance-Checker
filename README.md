@@ -1,34 +1,27 @@
-# Presencia — NFC Attendance Checker
+# 📡 Presencia NFC
 
 <img src="docs/screenshots/icon.png" width="140" alt="Presencia NFC: a tilted playing card with a tick and the near-field signal">
 
-**Tap your ID. Be Present.**
+
+## **Tap your ID. Be Present.**
 
 An offline Android app for taking class attendance by tapping student ID cards.
-Built for a class beadle: one roster per class, tap each card once, export the
-session as an Excel workbook. The app ships as **Presencia NFC**; the repository
-keeps its original name.
 
-**No server. No network permission. No student numbers** - a student is a name
-and a card UID, nothing else.
+Built for a **class beadle**: one roster per class, tap each card once, then export the session as an Excel workbook. The app ships as **Presencia NFC**; the repository keeps its original name.
 
-## What it does
+**No server. No network permission. No student numbers** — a student is a name and a card UID, nothing else.
 
-- **Sections** - one card per class, each with its own subject and roster. The
-  shelf is a centred carousel; the middle card is the selected class, and the
-  magnifier beside *New section* searches the shelf by class name, subject or
-  card face and brings a match to the middle.
-- **Register** - tap an ID card, type the name, save. A card already on the
-  roster updates its name instead of adding a second row.
-- **Scan** - tap each card once per session. A repeat read inside 3 seconds
-  counts once. A card read more than 15 minutes after the session starts is
-  still counted, but marked **late** (threshold selectable: 10/15/20/30). The
-  session can be paused and left open for late arrivals.
-- **Report** - absent list first, then late, then present, then unmatched
-  cards. Every row carries the date and time of the read.
-- **Export / Import** - write the report or the roster to `.xlsx` in the shared
-  `Documents/Presencia` folder, and import a roster another phone
-  exported. Rows merge by card UID; the subject travels with the file.
+## ✨ What it does
+
+- **🎴 Sections** — one card per class, each with its own subject and roster. The shelf is a **centred carousel**; the middle card is the selected class. The magnifier beside *New section* searches the shelf by **class name, subject, or card face** and brings a match to the middle.
+
+- **🪪 Register** — tap an ID card, type the name, and save. A card already on the roster **updates its name** instead of adding a second row.
+
+- **📡 Scan** — tap each card once per session. A repeat read inside **3 seconds** counts once. A card read more than **15 minutes** after the session starts is still counted, but marked **late**. The threshold can be set to **10/15/20/30 minutes**. The session can also be paused and left open for late arrivals.
+
+- **📋 Report** — **absent** first, then **late**, **present**, and **unmatched** cards. Every attendance row carries the **date and time** of the read.
+
+- **📊 Export / Import** — write the report or roster to `.xlsx` in the shared **`Documents/Presencia`** folder, or import a roster exported from another phone. Rows merge by **card UID**, and the **subject travels with the file**.
 
 ## Section styles
 
