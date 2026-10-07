@@ -76,31 +76,35 @@ object ReportBuilder {
         absent += listOf("Late (after " + windowMinutes + " min)", resolved.late.size.toString())
         absent += listOf("Absent", resolved.absent.size.toString())
         absent += listOf("Unmatched taps", resolved.unmatched.size.toString())
+        absent += listOf("Recorded by hand", resolved.manualCount.toString())
+        absent += listOf("Recorded by QR", resolved.countOf(AttendanceMethod.QR).toString())
         absent += listOf("")
         absent += listOf("Name")
         for (student in resolved.absent) absent += listOf(student.name)
 
         val late = mutableListOf<List<String>>()
         late += listOf("LATE - card read more than " + windowMinutes + " minute(s) after the start")
-        late += listOf("Name", "UID", "Date", "Time")
+        late += listOf("Name", "UID", "Date", "Time", "Method")
         for (item in resolved.late) {
             late += listOf(
                 item.student.name,
                 item.student.uid,
                 dateText(item.firstTapMillis),
                 timeText(item.firstTapMillis),
+                item.method.label,
             )
         }
 
         val present = mutableListOf<List<String>>()
-        present += listOf("PRESENT (on time) - with the date and time each card was scanned")
-        present += listOf("Name", "UID", "Date", "Time")
+        present += listOf("PRESENT (on time) - with the date and time each student was recorded")
+        present += listOf("Name", "UID", "Date", "Time", "Method")
         for (item in resolved.present) {
             present += listOf(
                 item.student.name,
                 item.student.uid,
                 dateText(item.firstTapMillis),
                 timeText(item.firstTapMillis),
+                item.method.label,
             )
         }
 

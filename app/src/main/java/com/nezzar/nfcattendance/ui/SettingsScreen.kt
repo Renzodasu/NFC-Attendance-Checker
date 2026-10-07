@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.nezzar.nfcattendance.data.ChartKind
 import com.nezzar.nfcattendance.data.HapticStrength
 import com.nezzar.nfcattendance.ui.theme.ThemeMode
 
@@ -105,43 +106,41 @@ fun SettingsScreen(state: AppState, modifier: Modifier = Modifier) {
                         "Present - a card read in the first " + state.lateAfterMinutes + " minutes.",
                         "Late - a card read after that. It still counts, it is only marked.",
                         "Pause instead of ending: the session stays open, so latecomers are still tapped.",
+                        "Applies to the sessions you start from now on - one already running, or already exported, keeps the window it began with.",
                     )
                 )
             }
         }
 
-        item(key = "style") {
+        item(key = "chart") {
             BrandCard {
-                SectionLabel("Section style")
+                SectionLabel("Chart")
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(
-                        VisualStyle.CARDS to "Cards",
-                        VisualStyle.PLAIN to "Plain",
-                        VisualStyle.SOLIDS to "Solids",
-                    ).forEach { (style, label) ->
-                        val chosen = state.visualStyle == style
+                    ChartKind.entries.forEach { kind ->
+                        val chosen = state.chartKind == kind
+                        val pick = { state.useChartKind(kind) }
                         if (chosen) {
                             Button(
-                                onClick = { state.useVisualStyle(style) },
+                                onClick = pick,
                                 modifier = Modifier.weight(1f),
-                            ) { Text(label, maxLines = 1) }
+                            ) { Text(kind.label, maxLines = 1) }
                         } else {
                             OutlinedButton(
-                                onClick = { state.useVisualStyle(style) },
+                                onClick = pick,
                                 modifier = Modifier.weight(1f),
-                            ) { Text(label, maxLines = 1) }
+                            ) { Text(kind.label, maxLines = 1) }
                         }
                     }
                 }
                 Spacer(Modifier.height(10.dp))
-                Points(
-                    listOf(
-                        "Cards - a face from a 52-card deck, drawn dark with green shapes. The default.",
-                        "Plain - the civil engineering sheet: a drafting grid, a truss mark, a title block.",
-                        "Solids - a wireframe polyhedron each: prism, cube, octahedron, icosahedron.",
-                    )
+                Note(
+                    "Pie shows the attendance itself: on time, late and absent. Line shows " +
+                        "when the room filled, with the late mark. Bar shows how each presence " +
+                        "was recorded: NFC, QR or by hand."
                 )
+                Spacer(Modifier.height(8.dp))
+                Note("This changes the chart on the report only. The numbers and the exported sheet are the same either way.")
             }
         }
 
@@ -192,20 +191,63 @@ fun SettingsScreen(state: AppState, modifier: Modifier = Modifier) {
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
+            }
+        }
+
+        item(key = "about") {
+            val cards = state.sections.sumOf { it.students.size }
+            BrandCard {
+                SectionLabel("About")
+                Spacer(Modifier.height(8.dp))
+                Text("Presencia NFC", style = MaterialTheme.typography.titleSmall)
+                Note("Tap your ID. Be Present.")
                 Spacer(Modifier.height(10.dp))
+                KeyValueRow("Version", BuildConfig.VERSION_NAME)
+                KeyValueRow("Sections", state.sections.size.toString())
+                KeyValueRow("Registered students", cards.toString())
+                KeyValueRow("Exports", "Documents/Presencia")
+                KeyValueRow("Reads", "NFC cards and QR codes")
+                KeyValueRow("Camera", "used only to decode a code, in memory")
+                KeyValueRow("Works without", "Internet, account, login")
+                Spacer(Modifier.height(8.dp))
                 Points(
                     listOf(
-                        "Vibration rides the phone's own haptics, so it asks for no extra permission.",
-                        "The beep is one short tone, played only when a card is read.",
+                        "Names and card UIDs live in this app's private storage only.",
+                        "The app holds no network permission, so a roster cannot leave the phone by itself.",
+                        "A student is a card UID and a name - no student number is recorded (RA 10173).",
                     )
                 )
             }
         }
 
-        item(key = "byteorder") {
+        // Real controls, but cosmetic or calibration: not what Settings is opened for.
+        item(key = "advanced") {
             BrandCard {
-                SectionLabel("Card UID byte order")
+                SectionLabel("Advanced")
+                Spacer(Modifier.height(10.dp))
+                Text("Section style", style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(
+                        VisualStyle.CARDS to "Cards",
+                        VisualStyle.PLAIN to "Plain",
+                        VisualStyle.SOLIDS to "Solids",
+                    ).forEach { (style, label) ->
+                        val chosen = state.visualStyle == style
+                        if (chosen) {
+                            Button(
+                                onClick = { state.useVisualStyle(style) },
+                                modifier = Modifier.weight(1f),
+                            ) { Text(label, maxLines = 1) }
+                        } else {
+                            OutlinedButton(
+                                onClick = { state.useVisualStyle(style) },
+                                modifier = Modifier.weight(1f),
+                            ) { Text(label, maxLines = 1) }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(
                         checked = state.uidReversed,
@@ -213,85 +255,22 @@ fun SettingsScreen(state: AppState, modifier: Modifier = Modifier) {
                     )
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        text = "Use the reversed reading",
+                        text = "Use the reversed UID reading",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-                Spacer(Modifier.height(8.dp))
-                Points(
-                    listOf(
-                        "Android can print a card's UID in either byte order.",
-                        "Tap a card on the Scan tab, then pick the reading below that matches your roster.",
-                    )
-                )
-                Spacer(Modifier.height(8.dp))
-                if (state.recentTaps.isEmpty()) {
-                    Note("No taps yet.")
-                } else {
+                if (state.recentTaps.isNotEmpty()) {
+                    Spacer(Modifier.height(10.dp))
                     for (tap in state.recentTaps) {
                         Text(
-                            text = "as-read " + tap.asRead + "   |   reversed " + tap.reversed,
+                            text = "as-read " + tap.asRead + "   |   " + tap.reversed,
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
-                }
-            }
-        }
-
-        item(key = "data") {
-            val cards = state.sections.sumOf { it.students.size }
-            BrandCard {
-                SectionLabel("Your data")
-                Spacer(Modifier.height(10.dp))
-                KeyValueRow("Sections", state.sections.size.toString())
-                KeyValueRow("Registered students", cards.toString())
-                KeyValueRow("Exports", "Documents/Presencia")
-                Spacer(Modifier.height(8.dp))
-                Points(
-                    listOf(
-                        "Names and card UIDs live in this app's private storage only.",
-                        "No server, and no network permission - nothing is uploaded.",
-                    )
-                )
-            }
-        }
-
-        item(key = "guide") {
-            BrandCard {
-                SectionLabel("New here?")
-                Spacer(Modifier.height(8.dp))
-                Note("The four steps of a class session, in order, are on the How to use page.")
-                Spacer(Modifier.height(12.dp))
-                OutlinedButton(
-                    onClick = { state.openOverlay(Overlay.TUTORIAL) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Open How to use") }
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = { state.showTutorialOnNextLaunch() },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Show it at startup again") }
-                if (state.tutorialQueued) {
+                } else {
                     Spacer(Modifier.height(8.dp))
-                    Note("Queued - the guide opens the next time the app starts.")
+                    Note("Only if your cards read backwards: tap one on Scan, then compare the codes here.")
                 }
-            }
-        }
-
-        item(key = "about") {
-            BrandCard {
-                SectionLabel("About")
-                Spacer(Modifier.height(8.dp))
-                KeyValueRow("App", "Presencia NFC")
-                KeyValueRow("Version", BuildConfig.VERSION_NAME)
-                KeyValueRow("Works without", "Internet, account, login")
-                Spacer(Modifier.height(8.dp))
-                Points(
-                    listOf(
-                        "A student is a card UID and a name. Nothing else is kept.",
-                        "No student number is ever recorded (RA 10173).",
-                    )
-                )
             }
         }
     }

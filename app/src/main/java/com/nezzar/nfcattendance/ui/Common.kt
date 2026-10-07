@@ -88,63 +88,6 @@ const val MotionTouchMs = 220
 const val MotionScreenMs = 300
 const val MotionStaggerMs = 30
 
-/**
- * The chosen section, drawn the way the current style draws a section: the card
- * face, or the corner of an engineering sheet. Small enough to sit in a pill.
- */
-@Composable
-fun SectionBadge(
-    style: VisualStyle,
-    card: String,
-    modifier: Modifier = Modifier,
-    height: Dp = 30.dp,
-) {
-    val width = height * 0.72f
-    if (style == VisualStyle.CARDS) {
-        val ink = MaterialTheme.colorScheme.primary
-        Box(
-            modifier = modifier
-                .size(width, height)
-                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp))
-                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(4.dp)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = PlayingCards.rank(card),
-                    fontSize = (height.value * 0.42f).sp,
-                    fontFamily = FontFamily.Serif,
-                    fontWeight = FontWeight.Bold,
-                    color = ink,
-                )
-                Text(
-                    text = PlayingCards.suit(card),
-                    fontSize = (height.value * 0.32f).sp,
-                    color = ink,
-                )
-            }
-        }
-    } else {
-        val ink = MaterialTheme.colorScheme.onSurfaceVariant
-        Box(
-            modifier = modifier
-                .size(width, height)
-                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp))
-                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(4.dp)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Canvas(modifier = Modifier.size(width * 0.72f, height * 0.5f)) {
-                val stroke = 1.2.dp.toPx()
-                val bottom = size.height
-                drawLine(ink, Offset(0f, bottom), Offset(size.width / 2f, 0f), stroke)
-                drawLine(ink, Offset(size.width / 2f, 0f), Offset(size.width, bottom), stroke)
-                drawLine(ink, Offset(0f, bottom), Offset(size.width, bottom), stroke)
-                drawLine(ink, Offset(size.width / 2f, 0f), Offset(size.width / 2f, bottom), stroke)
-            }
-        }
-    }
-}
-
 @Composable
 fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(
@@ -483,15 +426,6 @@ fun StaggeredRow(index: Int, content: @Composable () -> Unit) {
     ) {
         content()
     }
-}
-
-/** Icon + label action used inside cards. */
-@Composable
-fun CardActionRow(content: @Composable () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) { content() }
 }
 
 /**

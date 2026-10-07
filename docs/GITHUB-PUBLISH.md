@@ -55,11 +55,11 @@ On the repository page, press the cog next to **About**:
 1. Build the APK: `./gradlew :app:assembleDebug` (or `.\gradlew.bat` on Windows).
    The artefact lands at
    `app/build/outputs/apk/debug/Presencia-NFC-<version>-debug.apk`.
-2. Commit and tag: `git tag v.0.0.3` (the version in `app/build.gradle.kts`),
+2. Commit and tag: `git tag v.0.0.4` (the version in `app/build.gradle.kts`),
    then `git push --follow-tags`.
 3. On GitHub: **Releases → Draft a new release** → choose the tag, title it
-   **Presencia 0.0.3**, and paste the newest `CHANGELOG.md` section as the notes.
-4. Attach `Presencia-NFC-0.0.3-debug.apk` (debug-signed - fine for classroom
+   **Presencia 0.0.4**, and paste the newest `CHANGELOG.md` section as the notes.
+4. Attach `Presencia-NFC-0.0.4-debug.apk` (debug-signed - fine for classroom
    use, not for the Play Store).
 5. The **Actions** tab builds and unit-tests every push to `main` or `master`
    and keeps the APK as a workflow artefact.

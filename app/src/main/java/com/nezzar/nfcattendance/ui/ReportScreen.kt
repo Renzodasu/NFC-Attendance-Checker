@@ -18,6 +18,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,11 +39,6 @@ fun ReportScreen(state: AppState) {
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (state.selectedSection != null) {
-            item(key = "section-face") {
-                SectionFaceCard(state)
-            }
-        }
         item(key = "title") {
             CollapsingTitle(
                 title = "Session report",
@@ -101,6 +97,12 @@ fun ReportScreen(state: AppState) {
                 }
             }
 
+            // The tiles state the conclusion; the chart explains the same numbers one
+            // line down, and Export stays the screen's one action below it.
+            item(key = "chart") {
+                ReportChartCard(state = state, resolved = resolved, session = session)
+            }
+
             // The one action this screen owns sits above the lists, not below them.
             item(key = "export") {
                 BrandCard(modifier = Modifier.animateContentSize()) {
@@ -134,7 +136,21 @@ fun ReportScreen(state: AppState) {
             }
             items(resolved.absent, key = { it.uid }) { student ->
                 BrandCard(modifier = Modifier.animateItem()) {
-                    Text(student.name, style = MaterialTheme.typography.bodyLarge)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(student.name, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                text = student.uid,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        // A broken, lost or never-made card must not be able to turn a
+                        // present student into an absent one. The sheet records which.
+                        TextButton(onClick = { state.markPresent(student.uid) }) {
+                            Text("Mark present")
+                        }
+                    }
                 }
             }
 

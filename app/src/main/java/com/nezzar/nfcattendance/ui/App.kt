@@ -77,10 +77,10 @@ import kotlinx.coroutines.launch
 
 /** Bottom-bar destinations, in the same order as [Screen]. */
 /** The three tabs. Registering is a page under the shelf, not a fourth one. */
-private enum class Destination(val label: String, val icon: Int, val blurb: String) {
-    SECTIONS("Sections", R.drawable.ic_nav_sections, "Classes and their rosters"),
-    SCAN("Scan", R.drawable.ic_nav_scan, "Take attendance"),
-    REPORT("Report", R.drawable.ic_nav_report, "Result and export"),
+private enum class Destination(val label: String, val icon: Int) {
+    SECTIONS("Sections", R.drawable.ic_nav_sections),
+    SCAN("Scan", R.drawable.ic_nav_scan),
+    REPORT("Report", R.drawable.ic_nav_report),
 }
 
 @Composable
@@ -112,13 +112,16 @@ fun AppRoot(state: AppState, activity: Activity) {
     }
     // Armed for the two pages that take taps: the Scan tab, and the register page
     // (which lives under the shelf now, over the tabs).
-    val tapping = state.overlay == Overlay.REGISTER || state.screen == Screen.SCAN
+    // The card reader is armed for registration always, and for the Scan tab only while
+    // NFC is the chosen reader - in QR mode the camera is the reader, not the antenna.
+    val tapping = state.overlay == Overlay.REGISTER ||
+        (state.screen == Screen.SCAN && state.scanMode == ReaderMode.NFC)
     DisposableEffect(tapping, activity) {
         if (tapping) {
             scanner.start { bytes ->
                 val tapsBefore = state.session?.taps?.size ?: 0
                 val pendingBefore = state.registerState.pendingUid
-                if (state.overlay == Overlay.REGISTER) state.onRegisterTap(bytes) else state.onScanTap(bytes)
+                if (state.overlay == Overlay.REGISTER) state.onRegisterTap(bytes) else state.onNfcTap(bytes)
                 val landed = (state.session?.taps?.size ?: 0) > tapsBefore ||
                     (pendingBefore == null && state.registerState.pendingUid != null)
                 if (landed) {
@@ -161,27 +164,18 @@ fun AppRoot(state: AppState, activity: Activity) {
         onDispose { activity.unregisterReceiver(receiver) }
     }
 
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
-
-    // Back closes the page first, then the drawer.
+    // Back closes the open page. There is no drawer to close any more.
     BackHandler(enabled = state.overlay != null) { state.closeOverlay() }
-    BackHandler(enabled = state.overlay == null && drawerState.isOpen) {
-        scope.launch { drawerState.close() }
-    }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        gesturesEnabled = state.overlay == null,
-        drawerContent = {
-            AppDrawer(state) { scope.launch { drawerState.close() } }
-        },
-    ) {
-        Scaffold(
+    Scaffold(
             // Plain black behind every page: the theme's own background, unpainted.
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
-                ShellHeader(state, onMenu = { scope.launch { drawerState.open() } })
+                ShellHeader(
+                    state = state,
+                    onSettings = { state.openOverlay(Overlay.SETTINGS) },
+                    onGuide = { state.openOverlay(Overlay.TUTORIAL) },
+                )
             },
             bottomBar = {
                 // A page opens over the tabs on its own, so the bar would only be noise.
@@ -275,11 +269,11 @@ fun AppRoot(state: AppState, activity: Activity) {
                         Overlay.NEW_SECTION -> NewSectionScreen(state, pageModifier)
                         Overlay.SECTION -> SectionScreen(state, pageModifier)
                         Overlay.REGISTER -> RegisterScreen(state, activity, pageModifier)
+                        Overlay.QR_CONFIRM -> QrConfirmScreen(state, pageModifier)
                     }
                 }
             }
         }
-    }
 }
 
 /**
@@ -290,7 +284,7 @@ fun AppRoot(state: AppState, activity: Activity) {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ShellHeader(state: AppState, onMenu: () -> Unit) {
+private fun ShellHeader(state: AppState, onSettings: () -> Unit, onGuide: () -> Unit) {
     val overlay = state.overlay
     val label = when (overlay) {
         Overlay.SETTINGS -> "Settings"
@@ -298,20 +292,23 @@ private fun ShellHeader(state: AppState, onMenu: () -> Unit) {
         Overlay.STUDENT -> "Student"
         Overlay.ROSTER -> "Registered students"
         Overlay.NEW_SECTION -> "New section"
-        Overlay.SECTION -> "Manage section"
+        Overlay.SECTION -> "Edit class"
         Overlay.REGISTER -> "Register"
+        Overlay.QR_CONFIRM -> "Confirm student"
         null -> Destination.entries[state.screen.ordinal].label
     }
     Column {
         TopAppBar(
             navigationIcon = {
-                IconButton(onClick = { if (overlay != null) state.closeOverlay() else onMenu() }) {
-                    Icon(
-                        painter = painterResource(
-                            if (overlay != null) R.drawable.ic_back else R.drawable.ic_menu
-                        ),
-                        contentDescription = if (overlay != null) "Back" else "Open menu",
-                    )
+                // A page gets a back arrow; the tabs get nothing, because the bottom
+                // bar is the only navigation they need.
+                if (overlay != null) {
+                    IconButton(onClick = { state.closeOverlay() }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_back),
+                            contentDescription = "Back",
+                        )
+                    }
                 }
             },
             title = {
@@ -335,7 +332,23 @@ private fun ShellHeader(state: AppState, onMenu: () -> Unit) {
                 }
             },
             actions = {
-                // A page can lend the header one action. The Manage page lends it
+                // The two things that are not tabs live here, one tap from anywhere -
+                // they used to be three rows deep inside a drawer that repeated the tabs.
+                if (overlay == null) {
+                    IconButton(onClick = onGuide) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_book),
+                            contentDescription = "How to use",
+                        )
+                    }
+                    IconButton(onClick = onSettings) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_settings),
+                            contentDescription = "Settings",
+                        )
+                    }
+                }
+                // A page can lend the header one action. The Edit class page lends it
                 // Save, which is where a form's save belongs.
                 val actionLabel = state.headerActionLabel
                 val action = state.headerAction
@@ -368,69 +381,6 @@ private fun ShellHeader(state: AppState, onMenu: () -> Unit) {
             thickness = 1.dp,
             color = MaterialTheme.colorScheme.outlineVariant,
         )
-    }
-}
-
-/** The sidebar: where you are, then the two things that are not tabs. */
-@Composable
-private fun AppDrawer(state: AppState, onClose: () -> Unit) {
-    ModalDrawerSheet(
-        drawerContainerColor = MaterialTheme.colorScheme.surface,
-        drawerContentColor = MaterialTheme.colorScheme.onSurface,
-    ) {
-        Column(modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 28.dp, bottom = 16.dp)) {
-            Text("Presencia NFC", style = MaterialTheme.typography.headlineSmall)
-            Spacer(Modifier.width(6.dp))
-            Note("Tap your ID. Be Present.")
-        }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-        Destination.entries.forEachIndexed { index, destination ->
-            NavigationDrawerItem(
-                label = { Text(destination.label) },
-                icon = { Icon(painter = painterResource(destination.icon), contentDescription = null) },
-                badge = { Note(destination.blurb) },
-                selected = state.overlay == null && state.screen.ordinal == index,
-                onClick = {
-                    state.openOverlay(null)
-                    state.screen = Screen.entries[index]
-                    onClose()
-                },
-                modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
-            )
-        }
-
-        HorizontalDivider(
-            color = MaterialTheme.colorScheme.outlineVariant,
-            modifier = Modifier.padding(vertical = 8.dp),
-        )
-
-        NavigationDrawerItem(
-            label = { Text("Settings") },
-            icon = { Icon(painter = painterResource(R.drawable.ic_settings), contentDescription = null) },
-            selected = state.overlay == Overlay.SETTINGS,
-            onClick = {
-                state.openOverlay(Overlay.SETTINGS)
-                onClose()
-            },
-            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
-        )
-        NavigationDrawerItem(
-            label = { Text("How to use") },
-            icon = { Icon(painter = painterResource(R.drawable.ic_book), contentDescription = null) },
-            selected = state.overlay == Overlay.TUTORIAL,
-            onClick = {
-                state.openOverlay(Overlay.TUTORIAL)
-                onClose()
-            },
-            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
-        )
-
-        Column(modifier = Modifier.padding(20.dp)) {
-            Pill(text = "Offline", accent = false)
-            Spacer(Modifier.width(6.dp))
-            Note("The app holds no internet permission, so a roster cannot leave the phone by itself.")
-        }
     }
 }
 

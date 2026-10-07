@@ -4,6 +4,125 @@ All notable changes to NFC Attendance Checker. This project follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and uses date-based
 versions in the form `0.0.N`.
 
+## [0.0.4] - 2026-10-07
+
+### Added
+
+- **A QR fallback for when the card reader is not there.** The Scan tab now opens
+  with a reader switch - **NFC** or **QR** - and only ever one of them is live:
+  choosing QR turns reader mode off completely. QR mode shows a camera preview and
+  decodes the code with **ZXing**, entirely on the phone.
+  - **The code on a school ID does not identify a student**, and this app does not
+    pretend otherwise. It carries a student number, which is never read, kept,
+    shown or exported. The code is used for exactly one thing: to look for a
+    **name** that is already on the roster. The teacher confirms the name and then
+    verifies the card UID it belongs to before anything is recorded, so a scan
+    resolves to a person the same way a tap does - only by hand.
+  - **Attendance is written by the same rules either way.** A card tap, a code that
+    carries a card UID, and a code the teacher had to resolve by name all pass
+    through one function (`AttendanceProcessor`), so registered, unknown, duplicate,
+    session, pause, timestamp and present-or-late cannot differ between readers.
+  - **Every row now records the method**: NFC, QR or Manual, in a `Method` column in
+    the exported sheet, with a hand-recorded and QR-recorded count on the Absent
+    sheet. A report can always say how a student's presence was established.
+  - **A code the app prints itself** is on every student's page: it carries that
+    student's card UID and nothing else, so it resolves without asking anybody.
+
+- **Analytics on the session report.** A chart card now sits between the result
+  tiles and the export button, and **Settings > Chart** chooses the lens: **Pie**,
+  **Line** or **Bar**. Each answers a different question rather than redrawing the
+  same number:
+  - **Pie** - on time, late and absent as a ring over the roster. Unmatched taps are
+    deliberately **not** a slice: they are cards that matched nobody, so they are
+    not students, and putting them in would make the slices sum past the roster and
+    contradict the sheet. Late is drawn with a hatch as well as a tone, because green
+    and amber are the pair a colour-blind reader is most likely to confuse.
+  - **Line** - cumulative students read against minutes since the start, with the
+    session's late boundary drawn in. One student at minute 0 and three at minute 31
+    is the shape of a class, and the chart says so.
+  - **Bar** - how each presence was actually recorded: NFC, QR or by hand, with the
+    unmatched taps set apart and captioned.
+  - Every kind writes its figures out in a legend underneath, the whole card
+    collapses to one summary line, and a kind with nothing honest to draw (a line
+    needs two readings) steps aside for the pie with a note saying why.
+  - **No chart library.** The three charts are drawn with the same Compose Canvas
+    the app already uses for its card art, so the APK grew by ~44 KB rather than a
+    dependency.
+
+- **A session survives anything.** The app's state is a ViewModel, so rotating the
+  phone keeps a running session instead of rebuilding the state and throwing it
+  away - and a session is written to disk on every tap, so being killed in the
+  background no longer costs a class its attendance. A session that was still
+  running comes back on the next launch, announced as "restored with N tap(s)".
+- **Fix a wrong tap.** *Undo* on the Scan tab's new top line, and *Mark present*
+  on every absent row of the report - for the student whose card is broken, lost
+  or was never made. A hand-made presence is tagged as such: the exported sheet
+  carries a **Recorded** column reading "card" or "marked by hand", and the
+  Absent sheet counts them.
+- **The last card read, always in sight.** The Scan tab leads with a line that
+  never scrolls away: who was just recorded (or "NOT ON ROSTER"), how many taps
+  the session holds, and Undo.
+- **A damaged class list is reported, not swallowed.** If the class file cannot
+  be read, the Sections tab says so and the app refuses to write - the file is
+  left exactly as it was, with *Try again* and *Start fresh*, the latter moving
+  the unreadable file aside under a new name rather than deleting it.
+
+### Changed
+
+- **A second permission, and only that one.** The manifest adds `CAMERA` (with the
+  camera declared optional, so a tablet without one still installs and still taps
+  cards). There is still no `INTERNET` permission: the decoder runs on the device,
+  the frames are decoded in memory and dropped, and nothing is photographed, stored
+  or sent. Two dependencies were added for this: `com.google.zxing:core` (decoder
+  and encoder, Apache-2.0, pure Java) and the Jetpack `androidx.camera` family for
+  the preview and frames - no Google Play Services, no model download. The APK grew
+  from 13.0 MB to 15.3 MB.
+- **A repeat read is now refused rather than appended.** Scanning or tapping the
+  same student twice says "Already recorded: <name> at <time>", instead of adding a
+  row that is later de-duplicated. The rule is the same for both readers.
+
+- **Every write is atomic.** Files go to a temporary name and are renamed into
+  place, so a process killed mid-write leaves the previous file intact instead
+  of a half-written one. Both stores carry a schema version; older files still
+  read.
+- **The late window is snapshotted when a session starts.** Changing "Late after"
+  in Settings used to re-classify sessions that had already happened, and quietly
+  change a report that may already have been exported. It now applies to the
+  sessions you start from here on.
+- **The drawer is gone.** The sidebar listed the same three destinations as the
+  bottom bar, so Settings and How to use moved into the header as two icons, one
+  tap from anywhere, and nothing is listed twice.
+- **The Scan tab is about scanning.** The class card that opened the page is no
+  longer drawn above the reader, the class is named once instead of three times,
+  and the duplicate "Taps recorded", "Late after" and "Reader" rows are gone.
+  Pause and End session are above the fold again, not under the bottom bar.
+- **The report no longer wears another class's face.** The card drawn on the
+  Report page came from the shelf selection, so it could show a different class
+  from the session it was labelling. It is gone from Report, Register and Scan,
+  and stays on the class's own page, where the face is what you edit.
+- **"Manage" is now "Edit class"**, and the page it opens says so.
+- **Settings, shorter.** Section style and UID byte order moved under one
+  "Advanced" heading at the end; four explainer paragraphs and the "New here?"
+  card are gone; "Your data" merged into "About".
+
+### Removed
+
+- Dead UI: the card chip row no screen ever showed (and the 26 dp of card face
+  reserved for it), `CardActionRow`, `SectionBadge`, an unused accessor, the
+  unused `ic_delete` drawable, and the duplicate "Close" / "Back to the list"
+  buttons at the bottom of three pages - the header's back arrow was always there.
+
+### Fixed
+
+- Rotating the phone, or the process being killed, during a session no longer
+  discards the session.
+- A truncated or damaged class file no longer reads as "no classes", and is no
+  longer overwritten by the first edit made afterwards.
+- Moving the "Late after" setting no longer rewrites sessions that already ran.
+- The Report page no longer shows one class's card above another class's report.
+- The Scan tab's Start/Pause/End controls are no longer pushed under the bottom
+  bar by the class card that used to sit above them.
+
 ## [0.0.3] - 2026-10-05
 
 ### Added

@@ -1,5 +1,6 @@
 package com.nezzar.nfcattendance.ui
 
+import android.app.Application
 import androidx.compose.ui.geometry.Rect
 import android.content.Context
 import android.content.Intent
@@ -30,18 +31,51 @@ import com.nezzar.nfcattendance.data.Tap
 import com.nezzar.nfcattendance.data.Uid
 import com.nezzar.nfcattendance.data.XlsxReader
 import com.nezzar.nfcattendance.data.XlsxWriter
+import com.nezzar.nfcattendance.data.AttendanceMethod
+import com.nezzar.nfcattendance.data.AttendanceProcessor
+import com.nezzar.nfcattendance.data.ChartData
+import com.nezzar.nfcattendance.data.ChartKind
+import com.nezzar.nfcattendance.data.Outcome
+import com.nezzar.nfcattendance.data.ProcessedAttendance
+import com.nezzar.nfcattendance.data.QrCode
 import com.nezzar.nfcattendance.nfc.NfcState
 import com.nezzar.nfcattendance.ui.theme.ThemeMode
+import androidx.lifecycle.AndroidViewModel
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.Executors
 
 enum class Screen { SECTIONS, SCAN, REPORT }
 
-/** A full-screen page that opens over the tabs (from the sidebar, never a tab itself). */
-enum class Overlay { SETTINGS, TUTORIAL, STUDENT, ROSTER, NEW_SECTION, SECTION, REGISTER }
+/** A full-screen page that opens over the tabs (a tab never becomes one of these). */
+enum class Overlay { SETTINGS, TUTORIAL, STUDENT, ROSTER, NEW_SECTION, SECTION, REGISTER, QR_CONFIRM }
+
+/**
+ * Which reader the Scan tab is using. They are never both live: choosing QR turns
+ * reader mode off entirely, so a card cannot be half-read while the camera works.
+ */
+enum class ReaderMode(val label: String) {
+    NFC("NFC"),
+    QR("QR"),
+}
+
+/**
+ * A scanned code that could not identify its student, waiting for the teacher. The
+ * code's own text is not in here: it was used to answer one question and dropped, so
+ * a student number can never reach the screen, the file or the export.
+ */
+data class QrPending(
+    val candidates: List<Student>,
+    /** The name the teacher picked, or null while the names are still being chosen. */
+    val chosen: Student? = null,
+    /** True when the code itself suggested exactly one name. */
+    val suggested: Boolean = false,
+)
 
 /** The raw and byte-reversed readings, shown side by side while calibrating. */
 data class RecentTap(val asRead: String, val reversed: String)
@@ -55,10 +89,36 @@ data class PendingExport(
     enum class Kind { ROSTER, REPORT }
 }
 
-class AppState(context: Context) {
+/** The most recent card read on the Scan tab, for the line that never scrolls away. */
+data class LastRead(
+    val name: String?,
+    val uid: String,
+    val atMillis: Long,
+    val method: AttendanceMethod = AttendanceMethod.NFC,
+    /** True when the read was refused because this student is already recorded. */
+    val duplicate: Boolean = false,
+)
 
-    private val appContext = context.applicationContext
+/**
+ * The app's whole state. It is a ViewModel now, which is what makes it outlive a
+ * configuration change: rotating the phone used to rebuild the state object and
+ * throw a running session away. Process death is covered separately - a running
+ * session is written to disk on every tap and restored on the next launch.
+ */
+class AppState(application: Application) : AndroidViewModel(application) {
+
+    private val appContext: Application = application
     private val store = Store(appContext)
+
+    /**
+     * File writes run here, on one background thread. The state is updated
+     * immediately and the disk follows, so a tap never waits for IO - and the
+     * single thread keeps two writes from racing each other.
+     */
+    private val io = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() +
+            Executors.newSingleThreadExecutor().asCoroutineDispatcher(),
+    )
 
     var screen by mutableStateOf(Screen.SECTIONS)
 
@@ -94,6 +154,13 @@ class AppState(context: Context) {
     // Sections + roster ------------------------------------------------------
     var sections by mutableStateOf<List<Section>>(emptyList())
     var selectedName by mutableStateOf("")
+
+    /**
+     * Non-null when sections.json exists but could not be read. While this is set
+     * the app refuses to save anything: the data is still on disk, and the one
+     * thing that must never happen is a fresh save written on top of it.
+     */
+    var sectionsBroken by mutableStateOf<String?>(null)
     var sectionsMessage by mutableStateOf("No sections yet. Create one, then register students into it.")
     var sectionsError by mutableStateOf("")
     var uidReversed by mutableStateOf(false)
@@ -118,6 +185,21 @@ class AppState(context: Context) {
     var running by mutableStateOf(false)
     var statusText by mutableStateOf("Idle - no session running.")
     var lastTapKnown by mutableStateOf<Boolean?>(null)
+
+    /** The last card the reader saw, for the sticky line on the Scan tab. */
+    var lastRead by mutableStateOf<LastRead?>(null)
+
+    /** Why the last QR scan was refused, if it was: cleared by the next good read. */
+    var qrNotice by mutableStateOf<String?>(null)
+
+    /** The reader the Scan tab is on, remembered between launches. */
+    var scanMode by mutableStateOf(ReaderMode.NFC)
+
+    /** Which chart the Session report draws. One lens at a time. */
+    var chartKind by mutableStateOf(ChartKind.PIE)
+
+    /** A scanned code waiting for a confirmed name. Never persisted. */
+    var qrPending by mutableStateOf<QrPending?>(null)
     val recentTaps = mutableStateListOf<RecentTap>()
     var reportPath by mutableStateOf<String?>(null)
     var reportError by mutableStateOf<String?>(null)
@@ -154,7 +236,9 @@ class AppState(context: Context) {
     }
 
     init {
-        sections = store.loadSections()
+        val loaded = store.loadSections()
+        sections = loaded.sections
+        sectionsBroken = loaded.error
         uidReversed = store.isUidReversed()
         themeMode = when (store.themeMode().lowercase()) {
             "light" -> ThemeMode.LIGHT
@@ -165,20 +249,13 @@ class AppState(context: Context) {
         visualStyle = VisualStyle.fromStored(store.visualStyle())
         hapticStrength = HapticStrength.fromStored(store.hapticStrength())
         scanSound = store.isScanSoundOn()
-        // Sections restored from a file written before cards existed get dealt one.
-        if (sections.any { it.card.isBlank() }) {
-            val taken = sections.map { it.card }.filter { it.isNotBlank() }.toMutableSet()
-            sections = sections.map { section ->
-                if (section.card.isNotBlank()) {
-                    section
-                } else {
-                    val face = PlayingCards.pick(taken)
-                    taken += face
-                    section.copy(card = face)
-                }
-            }
-            store.saveSections(sections)
+        scanMode = if (store.readerMode().equals("qr", ignoreCase = true)) ReaderMode.QR else ReaderMode.NFC
+        chartKind = when (store.chartKind().lowercase()) {
+            "line" -> ChartKind.LINE
+            "bar" -> ChartKind.BAR
+            else -> ChartKind.PIE
         }
+        dealMissingCards()
         // Very first launch of this install: show the four steps, then never again.
         if (!store.hasSeenTutorial()) {
             overlay = Overlay.TUTORIAL
@@ -186,9 +263,74 @@ class AppState(context: Context) {
         }
         val stored = store.selectedSection()
         selectedName = Sections.find(sections, stored)?.name ?: sections.firstOrNull()?.name ?: ""
-        if (sections.isNotEmpty()) {
+        if (loaded.error != null) {
+            sectionsMessage = "The class list could not be read."
+        } else if (sections.isNotEmpty()) {
             sectionsMessage = sections.size.toString() + " section(s) restored from local storage; selected " +
                 (if (selectedName.isBlank()) "(none)" else selectedName) + "."
+        }
+        // A session that was still running when the app last stopped comes back, so a
+        // rotation, a memory kill or a flat battery cannot lose a class's attendance.
+        store.liveSession()?.let { live ->
+            session = live.session
+            running = true
+            paused = live.paused
+            statusText = "Session " + live.session.sessionId + " restored with " +
+                live.session.taps.size + " tap(s) already recorded."
+        }
+    }
+
+    /**
+     * Sections restored from a file written before cards existed get dealt one.
+     * Never runs while the file is unreadable - that is exactly the moment a save
+     * would replace whatever the file still holds.
+     */
+    private fun dealMissingCards() {
+        if (sectionsBroken != null) return
+        if (sections.none { it.card.isBlank() }) return
+        val taken = sections.map { it.card }.filter { it.isNotBlank() }.toMutableSet()
+        sections = sections.map { section ->
+            if (section.card.isNotBlank()) {
+                section
+            } else {
+                val face = PlayingCards.pick(taken)
+                taken += face
+                section.copy(card = face)
+            }
+        }
+        store.saveSections(sections)
+    }
+
+    /** Try the class list again - a failed read should be recoverable, not fatal. */
+    fun retryLoadSections() {
+        val loaded = store.loadSections()
+        sectionsBroken = loaded.error
+        if (loaded.error != null) return
+        sections = loaded.sections
+        dealMissingCards()
+        ensureSelection()
+        sectionsMessage = if (sections.isEmpty()) {
+            "Nothing to restore - the file is readable and empty."
+        } else {
+            sections.size.toString() + " section(s) restored."
+        }
+    }
+
+    /**
+     * The teacher chose to start over. The unreadable file is moved aside under a
+     * new name rather than deleted, so it can still be recovered by hand - and only
+     * then does the app agree to write again.
+     */
+    fun startFreshAfterUnreadable() {
+        val moved = store.setAsideUnreadableSections()
+        sectionsBroken = null
+        sections = emptyList()
+        selectedName = ""
+        store.setSelectedSection("")
+        sectionsMessage = if (moved != null) {
+            "Started fresh. The unreadable file was kept in the app's storage as " + moved.name + "."
+        } else {
+            "Started fresh."
         }
     }
 
@@ -277,6 +419,10 @@ class AppState(context: Context) {
     fun removeStudent(uid: String) = applyEdit(Sections.removeStudent(sections, selectedName, uid))
 
     private fun applyEdit(edit: Sections.Edit) {
+        if (sectionsBroken != null) {
+            sectionsError = "The class list cannot be read, so nothing is being saved. Restore or start fresh first."
+            return
+        }
         sections = edit.sections
         if (edit.error.isEmpty()) {
             sectionsError = ""
@@ -390,18 +536,6 @@ class AppState(context: Context) {
         headerAction = run
     }
 
-    /** True after the guide has been queued to open again on the next start. */
-    var tutorialQueued by mutableStateOf(false)
-
-    fun showTutorialOnNextLaunch() {
-        store.setTutorialSeen(false)
-        tutorialQueued = true
-    }
-
-    /** "Date updated: ..." for the selected section, or "Not recorded". */
-    fun selectedUpdatedText(): String =
-        ReportBuilder.dateUpdatedText(selectedSection?.updatedAt ?: 0L)
-
     // -------------------------------------------------------------------- export
 
     fun exportRoster() {
@@ -432,7 +566,7 @@ class AppState(context: Context) {
         deliver(
             PendingExport.Kind.REPORT,
             "attendance-" + current.sessionId + ".xlsx",
-            bytes(ReportBuilder.sheets(current, lateAfterMillis())),
+            bytes(ReportBuilder.sheets(current, sessionWindowMillis(current))),
         )
     }
 
@@ -561,6 +695,10 @@ class AppState(context: Context) {
 
     fun confirmImport() {
         val plan = importPlan ?: return
+        if (sectionsBroken != null) {
+            importError = "The class list cannot be read, so importing would overwrite it. Fix that first."
+            return
+        }
         if (plan.error.isNotEmpty()) {
             importError = plan.error
             return
@@ -647,6 +785,7 @@ class AppState(context: Context) {
             startedAtMillis = now,
             taps = emptyList(),
             roster = section.students,
+            lateAfterMinutes = lateAfterMinutes,
         )
         running = true
         paused = false
@@ -654,49 +793,180 @@ class AppState(context: Context) {
         reportError = null
         reportUri = null
         lastTapKnown = null
+        lastRead = null
         statusText = "Session " + id + " started for " + section.name + ". Tap student IDs one by one."
+        // On disk before the first card: a session that is lost now is lost for good.
+        persistSession()
     }
 
     fun stopSession() {
         val current = session ?: return
         running = false
         paused = false
-        store.saveSession(current)
+        persistSession()
         statusText = "Session " + current.sessionId + " saved with " + current.taps.size + " tap(s)."
     }
 
-    fun onScanTap(bytes: ByteArray) {
+    /**
+     * An NFC card. The bytes become an identifier and go straight to the one
+     * attendance processor - the same one a QR scan uses.
+     */
+    fun onNfcTap(bytes: ByteArray) {
         val asRead = Uid.canonical(bytes)
         val flipped = Uid.reversed(bytes)
         noteTap(asRead, flipped)
+        submitAttendance(if (uidReversed) flipped else asRead, AttendanceMethod.NFC)
+    }
 
-        val uid = if (uidReversed) flipped else asRead
-        val current = session
-        if (current == null || !running) {
-            lastTapKnown = null
-            statusText = "No session running - tap of " + uid + " ignored."
+    /**
+     * A scanned QR code. The payload carries the SAME identifier an NFC card does,
+     * so it enters the same processor and obeys the same rules - no second set of
+     * attendance rules exists for QR.
+     */
+    fun onQrScan(payload: String, atMillis: Long = System.currentTimeMillis()) {
+        if (session == null || !running) {
+            qrNotice = "No session running - that scan was not recorded."
+            statusText = qrNotice ?: ""
             return
         }
         if (paused) {
-            lastTapKnown = null
-            statusText = "Paused - tap of " + uid + " not recorded. Press Resume when the class is ready."
+            qrNotice = "Paused - that scan was not recorded. Press Resume when the class is ready."
+            statusText = qrNotice ?: ""
             return
         }
+
+        val rosterNow = session?.roster ?: emptyList()
+        when (val reading = QrCode.read(payload, rosterNow)) {
+            QrCode.Reading.Empty -> {
+                qrNotice = "Nothing was in that QR code."
+                statusText = qrNotice ?: ""
+            }
+            // A code this app printed carries the card UID, so nobody has to be asked.
+            is QrCode.Reading.ByUid -> submitAttendance(reading.uid, AttendanceMethod.QR, atMillis)
+            // The code carried a name: confirm it, then verify the UID it belongs to.
+            is QrCode.Reading.Named -> openQrConfirm(reading.candidates, suggested = true)
+            QrCode.Reading.NeedsChoice -> openQrConfirm(rosterNow, suggested = false)
+        }
+    }
+
+    /**
+     * The confirmation step, which is the whole point of the QR fallback: the code on
+     * a school ID does not identify a student, so a person does. The names are shown;
+     * the teacher confirms which one, and the card UID is put in front of them to
+     * verify before anything is recorded.
+     */
+    private fun openQrConfirm(candidates: List<Student>, suggested: Boolean) {
+        if (candidates.isEmpty()) {
+            qrNotice = "Nobody is registered in this section yet."
+            statusText = qrNotice ?: ""
+            return
+        }
+        qrNotice = null
+        qrPending = QrPending(
+            candidates = candidates,
+            chosen = if (suggested && candidates.size == 1) candidates.first() else null,
+            suggested = suggested && candidates.size == 1,
+        )
+        overlay = Overlay.QR_CONFIRM
+    }
+
+    fun qrChoose(student: Student) {
+        qrPending = qrPending?.copy(chosen = student, suggested = false)
+    }
+
+    fun qrBackToNames() {
+        qrPending = qrPending?.copy(chosen = null)
+    }
+
+    fun cancelQr() {
+        qrPending = null
+        closeOverlay()
+    }
+
+    /** The teacher confirmed the name and verified the UID: record it, as a QR read. */
+    fun confirmQrAttendance() {
+        val chosen = qrPending?.chosen ?: return
         val now = System.currentTimeMillis()
-        val previous = current.taps.lastOrNull()
-        if (previous != null && previous.uid == uid && now - previous.atMillis < 3000L) {
-            statusText = "Repeat tap of " + uid + " ignored (same UID within 3 s)."
-            return
+        val current = session
+        val result = AttendanceProcessor.processForStudent(
+            student = chosen,
+            method = AttendanceMethod.QR,
+            session = current,
+            running = running,
+            paused = paused,
+            atMillis = now,
+            windowMillis = current?.let { sessionWindowMillis(it) } ?: lateAfterMillis(),
+        )
+        applyResult(result, now, AttendanceMethod.QR, current)
+        qrPending = null
+        closeOverlay()
+    }
+
+    fun useChartKind(kind: ChartKind) {
+        chartKind = kind
+        store.setChartKind(kind.name.lowercase())
+    }
+
+    fun useReaderMode(mode: ReaderMode) {
+        scanMode = mode
+        store.setReaderMode(mode.name.lowercase())
+        qrNotice = null
+        qrPending = null
+    }
+
+    /**
+     * The single gate every identifier passes through, whoever read it. Registered,
+     * unknown, duplicate, session running, paused, on time or late, and which reader
+     * recorded it - all decided here, once, for both readers.
+     */
+    private fun submitAttendance(
+        identifier: String,
+        method: AttendanceMethod,
+        atMillis: Long = System.currentTimeMillis(),
+    ) {
+        val current = session
+        val result = AttendanceProcessor.process(
+            rawIdentifier = identifier,
+            method = method,
+            session = current,
+            running = running,
+            paused = paused,
+            atMillis = atMillis,
+            windowMillis = current?.let { sessionWindowMillis(it) } ?: lateAfterMillis(),
+        )
+        applyResult(result, atMillis, method, current)
+    }
+
+    /** Writes a processor's answer into the screen and, when it counts, onto the disk. */
+    private fun applyResult(
+        result: ProcessedAttendance,
+        atMillis: Long,
+        method: AttendanceMethod,
+        current: AttendanceSession?,
+    ) {
+        statusText = result.message
+        when (result.outcome) {
+            Outcome.NO_SESSION, Outcome.PAUSED -> Unit
+            else -> lastTapKnown = result.student != null
         }
-        val student = current.roster.firstOrNull { Uid.normalize(it.uid) == uid }
-        lastTapKnown = student != null
-        val at = ReportBuilder.timeText(now)
-        statusText = if (student != null) {
-            "Present: " + student.name + " (" + uid + ") at " + at
-        } else {
-            "NOT ON ROSTER at " + at + ": " + uid + " - flagged, not dropped."
+
+        if (result.records && current != null) {
+            session = current.copy(taps = current.taps + result.tap())
+            lastRead = LastRead(result.student?.name, result.identifier, atMillis, method)
+            qrNotice = null
+            persistSession()
+        } else if (result.outcome == Outcome.DUPLICATE) {
+            // Not appended, but the teacher has to see why nothing changed.
+            lastRead = LastRead(result.student?.name, result.identifier, atMillis, method, duplicate = true)
         }
-        session = current.copy(taps = current.taps + Tap(uid, now))
+    }
+
+    /** Writes the session row as it stands. Called on start, on every tap, and on pause. */
+    private fun persistSession() {
+        val current = session ?: return
+        val liveNow = running
+        val pausedNow = paused
+        io.launch { store.saveSession(current, live = liveNow, paused = pausedNow) }
     }
 
     fun resolved(): ResolvedAttendance? {
@@ -705,9 +975,18 @@ class AppState(context: Context) {
             roster = current.roster,
             taps = current.taps,
             startedAtMillis = current.startedAtMillis,
-            lateAfterMillis = lateAfterMillis(),
+            lateAfterMillis = sessionWindowMillis(current),
         )
     }
+
+    /**
+     * The window this session is judged by - the one it was STARTED with, not the
+     * one in Settings today. Otherwise changing 15 to 30 minutes would quietly move
+     * yesterday's latecomers to present and change a report that was already sent.
+     * A session restored from an older file has no snapshot and uses the setting.
+     */
+    private fun sessionWindowMillis(current: AttendanceSession): Long =
+        AttendanceResolver.windowFor(current, lateAfterMillis())
 
     /** The window in milliseconds, from the stored minutes. */
     fun lateAfterMillis(): Long = lateAfterMinutes.toLong() * 60L * 1000L
@@ -726,6 +1005,28 @@ class AppState(context: Context) {
             "Resumed at " + ReportBuilder.timeText(System.currentTimeMillis()) +
                 ". Late arrivals count as late."
         }
+        persistSession()
+    }
+
+    // ------------------------------------------------------------ corrections
+
+    /** Take back the most recent tap of this session. */
+    fun undoLastTap() {
+        val current = session ?: return
+        val last = current.taps.lastOrNull() ?: return
+        session = current.copy(taps = current.taps.dropLast(1))
+        lastRead = null
+        val name = current.roster.firstOrNull { Uid.normalize(it.uid) == last.uid }?.name
+        statusText = "Removed the last tap: " + (name ?: last.uid) + "."
+        persistSession()
+    }
+
+    /**
+     * Record a student by hand - the one whose card is broken, lost or never made.
+     * The tap is tagged MANUAL, so the report never claims a card was scanned.
+     */
+    fun markPresent(uid: String) {
+        submitAttendance(uid, AttendanceMethod.MANUAL)
     }
 
     // -------------------------------------------------------------------- shared

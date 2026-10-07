@@ -196,11 +196,6 @@ fun SectionScreen(state: AppState, modifier: Modifier = Modifier) {
             }
 
             item(key = "delete") { DeleteCard(state, section) }
-            item(key = "close") {
-                TextButton(onClick = { state.closeOverlay() }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Close")
-                }
-            }
         }
     }
 }

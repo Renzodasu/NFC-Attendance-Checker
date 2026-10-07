@@ -104,11 +104,6 @@ fun RegisterScreen(state: AppState, activity: Activity, modifier: Modifier = Mod
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (state.selectedSection != null) {
-            item(key = "section-face") {
-                SectionFaceCard(state)
-            }
-        }
         item(key = "title") {
             CollapsingTitle(
                 title = "Register students",
@@ -195,7 +190,6 @@ fun RegisterScreen(state: AppState, activity: Activity, modifier: Modifier = Mod
                     Note(register.message)
                 }
                 Spacer(Modifier.height(10.dp))
-                KeyValueRow("Students saved this run", register.savedCount.toString())
                 KeyValueRow(
                     label = "Last saved",
                     value = register.lastSaved ?: "nothing yet",

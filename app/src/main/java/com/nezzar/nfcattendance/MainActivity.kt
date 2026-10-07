@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.ViewModelProvider
 import com.nezzar.nfcattendance.ui.AppRoot
 import com.nezzar.nfcattendance.ui.AppState
 import com.nezzar.nfcattendance.ui.theme.NFCAttendanceTheme
@@ -20,7 +21,9 @@ class MainActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
         )
-        val state = AppState(applicationContext)
+        // Held by the ViewModel store, so rotating the phone keeps the running
+        // session instead of rebuilding the state and throwing it away.
+        val state = ViewModelProvider(this)[AppState::class.java]
         setContent {
             NFCAttendanceTheme(mode = state.themeMode) {
                 AppRoot(state, this@MainActivity)

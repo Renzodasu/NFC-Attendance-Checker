@@ -150,7 +150,32 @@ fun SectionsScreen(state: AppState) {
             )
         }
 
-        if (state.sections.isEmpty()) {
+        // A file that exists but cannot be read is NOT an empty app. Saying so - and
+        // refusing to write - is the whole difference between a warning and data loss.
+        state.sectionsBroken?.let { broken ->
+            item(key = "broken") {
+                BrandCard {
+                    SectionLabel("Your class list could not be read")
+                    Spacer(Modifier.height(8.dp))
+                    Text(broken, style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.height(8.dp))
+                    Note("Nothing has been saved over it. The file is still on the phone, exactly as it was.")
+                    Spacer(Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Button(
+                            onClick = { state.retryLoadSections() },
+                            modifier = Modifier.weight(1f).height(54.dp),
+                        ) { Text("Try again") }
+                        OutlinedButton(
+                            onClick = { state.startFreshAfterUnreadable() },
+                            modifier = Modifier.weight(1f).height(54.dp),
+                        ) { Text("Start fresh") }
+                    }
+                }
+            }
+        }
+
+        if (state.sections.isEmpty() && state.sectionsBroken == null) {
             item(key = "first-run") {
                 EmptyState(
                     icon = R.drawable.ic_add,
@@ -297,9 +322,6 @@ fun SectionsScreen(state: AppState) {
                             val section = state.sections[page]
                             val onSelect: () -> Unit = {
                                 state.selectSection(section.name)
-                                // The selected card knows where it is, so the tab it
-                                // opens onto can start from exactly here.
-                                state.armCardFlight()
                                 scope.launch { pagerState.animateScrollToPage(page) }
                             }
                             val selected = section.name == state.selectedName
@@ -398,35 +420,10 @@ fun SectionsScreen(state: AppState) {
                             modifier = Modifier.size(20.dp),
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text("Manage")
+                        Text("Edit class")
                     }
                 }
             }
-        }
-    }
-}
-
-/**
- * The chosen card's controls, along its bottom edge: Register opens the page that
- * adds students to this class, Manage opens the class's own page.
- */
-@Composable
-private fun CardChipRow(
-    accent: Color,
-    onManage: (() -> Unit)?,
-    onRegister: (() -> Unit)?,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        if (onRegister != null) {
-            CardChip(label = "Register", accent = accent, onClick = onRegister)
-        }
-        if (onManage != null) {
-            CardChip(label = "Manage", accent = accent, onClick = onManage)
         }
     }
 }
@@ -446,8 +443,6 @@ private val ShelfCardHeight = 444.dp
  * A section card, retextured as a real playing card: ivory stock, the black or red
  * corner index in two opposite corners, and a faint suit watermark behind the class
  * details. Selection is the accent border and the lift, not a repaint.
- *
- * The chosen card carries one chip: Manage, along the bottom edge.
  */
 @Composable
 fun SectionCard(
@@ -455,8 +450,6 @@ fun SectionCard(
     selected: Boolean,
     modifier: Modifier = Modifier,
     onSelect: () -> Unit,
-    onManage: (() -> Unit)? = null,
-    onRegister: (() -> Unit)? = null,
     glow: CardGlow = CardGlow.Idle,
     cardWidth: Dp = FaceWidth,
     cardHeight: Dp = FaceHeight,
@@ -592,14 +585,6 @@ fun SectionCard(
                     modifier = Modifier.align(Alignment.TopEnd),
                 )
             }
-            if (selected && (onManage != null || onRegister != null)) {
-                CardChipRow(
-                    accent = MaterialTheme.colorScheme.primary,
-                    onManage = onManage,
-                    onRegister = onRegister,
-                    modifier = Modifier.align(Alignment.BottomCenter),
-                )
-            }
         }
     }
 }
@@ -607,7 +592,6 @@ fun SectionCard(
 /**
  * The default texture: a civil engineering drawing sheet. A drafting grid, a truss
  * mark where a card keeps its index, and a title block along the bottom. The chosen
- * sheet carries a Manage chip along its bottom edge.
  */
 @Composable
 fun PlainSectionCard(
@@ -615,8 +599,6 @@ fun PlainSectionCard(
     selected: Boolean,
     modifier: Modifier = Modifier,
     onSelect: () -> Unit,
-    onManage: (() -> Unit)? = null,
-    onRegister: (() -> Unit)? = null,
     glow: CardGlow = CardGlow.Idle,
     cardWidth: Dp = FaceWidth,
     cardHeight: Dp = FaceHeight,
@@ -717,16 +699,6 @@ fun PlainSectionCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                // Room for the Manage chip that sits over the bottom edge of the sheet.
-                Spacer(Modifier.height(26.dp))
-            }
-            if (selected && (onManage != null || onRegister != null)) {
-                CardChipRow(
-                    accent = MaterialTheme.colorScheme.primary,
-                    onManage = onManage,
-                    onRegister = onRegister,
-                    modifier = Modifier.align(Alignment.BottomCenter),
-                )
             }
         }
     }
@@ -735,7 +707,6 @@ fun PlainSectionCard(
 /**
  * The polyhedron texture: a dark card whose face is a wireframe solid, drawn in the
  * accent colour and lit up when the class is the chosen one. The chosen card carries
- * a Manage chip along its bottom edge.
  */
 @Composable
 fun SolidSectionCard(
@@ -744,8 +715,6 @@ fun SolidSectionCard(
     selected: Boolean,
     modifier: Modifier = Modifier,
     onSelect: () -> Unit,
-    onManage: (() -> Unit)? = null,
-    onRegister: (() -> Unit)? = null,
     glow: CardGlow = CardGlow.Idle,
     cardWidth: Dp = FaceWidth,
     cardHeight: Dp = FaceHeight,
@@ -847,52 +816,6 @@ fun SolidSectionCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (selected && (onManage != null || onRegister != null)) {
-                CardChipRow(
-                    accent = accent,
-                    onManage = onManage,
-                    onRegister = onRegister,
-                    modifier = Modifier.align(Alignment.BottomCenter),
-                )
-            }
-        }
-    }
-}
-
-/** One corner index: rank over suit, mirrored into the far corner by rotation. */
-/**
- * The action a chosen class card carries, drawn on the card itself: Manage opens
- * the class's own page. Only the chosen card shows it, so the shelf stays quiet
- * until a class is picked.
- */
-@Composable
-private fun CardChip(
-    label: String,
-    accent: Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val interaction = remember { MutableInteractionSource() }
-    Surface(
-        color = accent.copy(alpha = 0.18f),
-        contentColor = accent,
-        shape = RoundedCornerShape(50),
-        border = BorderStroke(1.dp, accent.copy(alpha = 0.6f)),
-        modifier = modifier
-            .height(34.dp)
-            .pressScale(interaction, pressed = 0.94f)
-            .cardClick(interaction, onClick = onClick),
-    ) {
-        Box(
-            modifier = Modifier.padding(horizontal = 14.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = label,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 0.6.sp,
-            )
         }
     }
 }

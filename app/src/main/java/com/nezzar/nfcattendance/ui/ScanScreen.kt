@@ -2,12 +2,14 @@ package com.nezzar.nfcattendance.ui
 
 import android.app.Activity
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,22 +19,28 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nezzar.nfcattendance.R
+import com.nezzar.nfcattendance.data.AttendanceMethod
 import com.nezzar.nfcattendance.data.ReportBuilder
 import com.nezzar.nfcattendance.nfc.NfcState
 
@@ -48,17 +56,17 @@ fun ScanScreen(state: AppState, activity: Activity) {
     val current = state.session
     val listState = rememberLazyListState()
 
+    Column(modifier = Modifier.fillMaxSize()) {
+        // What was just read, above everything and outside the scroll: the one fact
+        // this screen exists to deliver, and it no longer hides under the fold.
+        LastReadBar(state)
+
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (state.selectedSection != null) {
-            item(key = "section-face") {
-                SectionFaceCard(state)
-            }
-        }
         item(key = "title") {
             CollapsingTitle(
                 title = "Scan attendance",
@@ -74,32 +82,69 @@ fun ScanScreen(state: AppState, activity: Activity) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     NfcLight(state)
-                    SectionLabel("NFC reader")
+                    SectionLabel(if (state.scanMode == ReaderMode.NFC) "NFC reader" else "QR reader")
                 }
-                Spacer(Modifier.height(6.dp))
-                val readerLine = when {
-                    nfc == NfcState.UNSUPPORTED ->
-                        "No NFC adapter on this device (an emulator never has one)."
-                    nfc == NfcState.DISABLED ->
-                        "NFC adapter is present but switched off in system settings."
-                    state.paused ->
-                        "Paused - the reader is off and taps are ignored. Press Resume when the " +
-                            "class (or a late arrival) is ready."
-                    else ->
-                        "Reader mode active - hold each student ID to the phone's NFC antenna."
-                }
-                // The reader's sentence turns with the hardware and with Pause, not
-                // with a tap: it cross-fades so the eye follows what changed.
-                Crossfade(
-                    targetState = readerLine,
-                    animationSpec = tween(MotionTouchMs, easing = EmphasizedDecelerate),
-                    label = "readerLine",
-                ) { line ->
-                    Text(text = line, style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(10.dp))
+                // Which reader this session uses. Never both: choosing QR turns reader
+                // mode off entirely, so a card cannot be half-read while the camera works.
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ReaderMode.entries.forEach { mode ->
+                        val chosen = state.scanMode == mode
+                        val pick = { state.useReaderMode(mode) }
+                        if (chosen) {
+                            Button(
+                                onClick = pick,
+                                modifier = Modifier.weight(1f).height(48.dp),
+                            ) { Text(mode.label) }
+                        } else {
+                            OutlinedButton(
+                                onClick = pick,
+                                modifier = Modifier.weight(1f).height(48.dp),
+                            ) { Text(mode.label) }
+                        }
+                    }
                 }
                 Spacer(Modifier.height(12.dp))
-                KeyValueRow("Section", section?.name ?: "(none selected)")
-                KeyValueRow("Roster", state.roster.size.toString() + " registered")
+                if (state.scanMode == ReaderMode.QR) {
+                    if (state.paused) {
+                        Text(
+                            text = "Paused - the reader is off and codes are ignored. Press " +
+                                "Resume when the class (or a late arrival) is ready.",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    } else {
+                        QrReader(state)
+                    }
+                } else {
+                    val readerLine = when {
+                        nfc == NfcState.UNSUPPORTED ->
+                            "No NFC adapter on this device (an emulator never has one)."
+                        nfc == NfcState.DISABLED ->
+                            "NFC adapter is present but switched off in system settings."
+                        state.paused ->
+                            "Paused - the reader is off and taps are ignored. Press Resume when the " +
+                                "class (or a late arrival) is ready."
+                        else ->
+                            "Reader mode active - hold each student ID to the phone's NFC antenna."
+                    }
+                    // The reader's sentence turns with the hardware and with Pause, not
+                    // with a tap: it cross-fades so the eye follows what changed.
+                    Crossfade(
+                        targetState = readerLine,
+                        animationSpec = tween(MotionTouchMs, easing = EmphasizedDecelerate),
+                        label = "readerLine",
+                    ) { line ->
+                        Text(text = line, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                // One line for the class: the header pill and the shelf already name it.
+                Text(
+                    text = (section?.name ?: "No section selected") + "  ·  " +
+                        state.roster.size.toString() + " registered",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Spacer(Modifier.height(12.dp))
                 AnimatedContent(
                     targetState = state.running,
@@ -212,16 +257,84 @@ fun ScanScreen(state: AppState, activity: Activity) {
                     label = "Started",
                     value = current?.let { ReportBuilder.stampText(it.startedAtMillis) } ?: "not started",
                 )
-                KeyValueRow("Taps recorded", (current?.taps?.size ?: 0).toString())
-                KeyValueRow(
-                    label = "Late after",
-                    value = state.lateAfterMinutes.toString() + " minute(s) from the start",
-                )
-                KeyValueRow("Reader", if (state.paused) "paused" else "listening")
                 Spacer(Modifier.height(12.dp))
                 AnimatedStatusLine(text = state.statusText, emphasise = state.running)
             }
         }
 
+    }
+    }
+}
+
+/**
+ * The line that never scrolls away: the card that was in the teacher's hand a
+ * second ago, whether it belongs to this roster, and how many taps the session
+ * has. Undo lives here too, because a wrong tap is noticed right here.
+ */
+@Composable
+private fun LastReadBar(state: AppState) {
+    val last = state.lastRead
+    val taps = state.session?.taps?.size ?: 0
+    val show = state.running || last != null
+
+    AnimatedVisibility(
+        visible = show,
+        enter = fadeIn(tween(MotionTouchMs)) + slideInVertically(
+            animationSpec = tween(MotionTouchMs, easing = EmphasizedDecelerate),
+        ) { height -> -height },
+        exit = fadeOut(tween(140)) + slideOutVertically(tween(MotionTouchMs)) { height -> -height },
+    ) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 6.dp),
+        ) {
+            Row(
+                modifier = Modifier.padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                NfcLight(state, dot = 8.dp)
+                Column(modifier = Modifier.weight(1f)) {
+                    val headline = when {
+                        last == null -> "Ready - waiting for the first card"
+                        last.duplicate -> "Already recorded: " + (last.name ?: last.uid)
+                        last.method == AttendanceMethod.MANUAL -> "Marked by hand: " + (last.name ?: last.uid)
+                        last.name != null -> "Recorded: " + last.name
+                        else -> "NOT ON ROSTER"
+                    }
+                    Text(
+                        text = headline,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = buildString {
+                            if (last != null) {
+                                if (last.name == null) {
+                                    append(last.uid)
+                                    append("  ·  ")
+                                }
+                                append(last.method.label)
+                                append("  ·  ")
+                            }
+                            append(taps)
+                            append(if (taps == 1) " tap recorded" else " taps recorded")
+                            if (!state.running) append("  ·  session not running")
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                TextButton(onClick = { state.undoLastTap() }, enabled = taps > 0) {
+                    Text("Undo")
+                }
+            }
+        }
     }
 }

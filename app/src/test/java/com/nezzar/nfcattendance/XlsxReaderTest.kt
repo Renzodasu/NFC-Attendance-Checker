@@ -154,12 +154,12 @@ class XlsxReaderTest {
         assertEquals(listOf("Absent", "Late", "Present", "Unmatched"), book.sheetNames)
         val absent = book.sheet("Absent")!!
         // The Late sheet exists even when nobody was late - the shape must not move.
-        assertEquals(listOf("Name", "UID", "Date", "Time"), book.sheet("Late")!![1])
+        assertEquals(listOf("Name", "UID", "Date", "Time", "Method"), book.sheet("Late")!![1])
         assertEquals("ABSENT - the conclusion (roster minus present)", absent[0][0])
         assertEquals("Ben Cruz", absent[absent.size - 1][0])
         val present = book.sheet("Present")!!
         // Every scanned card carries the date and the time it was read.
-        assertEquals(listOf("Name", "UID", "Date", "Time"), present[1])
+        assertEquals(listOf("Name", "UID", "Date", "Time", "Method"), present[1])
         assertEquals("Ana Reyes", present[2][0])
         assertEquals(ReportBuilder.dateText(1_767_225_601_000L), present[2][2])
         assertEquals(ReportBuilder.timeText(1_767_225_601_000L), present[2][3])
@@ -186,7 +186,7 @@ class XlsxReaderTest {
 
         assertEquals(listOf("Absent", "Late", "Present", "Unmatched"), book.sheetNames)
         val late = book.sheet("Late")!!
-        assertEquals(listOf("Name", "UID", "Date", "Time"), late[1])
+        assertEquals(listOf("Name", "UID", "Date", "Time", "Method"), late[1])
         assertEquals("Ben Cruz", late[2][0])
         assertEquals(ReportBuilder.dateText(start + 18L * 60_000L), late[2][2])
         assertEquals(ReportBuilder.timeText(start + 18L * 60_000L), late[2][3])
@@ -194,6 +194,37 @@ class XlsxReaderTest {
         // Keep the bytes on disk so the workbook can be opened and inspected.
         val outDir = File("build/nfc-artifacts").apply { mkdirs() }
         File(outDir, "attendance-S-DEMO-LATE.xlsx").writeBytes(buffer.toByteArray())
+    }
+
+    @Test
+    fun aHandMadeCorrectionIsNotReportedAsAScannedCard() {
+        val start = 1_700_000_000_000L
+        val session = AttendanceSession(
+            sessionId = "S-DEMO-MANUAL",
+            sectionName = "BSCE-4B",
+            startedAtMillis = start,
+            roster = listOf(Student("Ana Reyes", "04A1B2C3"), Student("Ben Cruz", "04A1B2C4")),
+            taps = listOf(
+                com.nezzar.nfcattendance.data.Tap("04A1B2C3", start + 60_000L),
+                // The card was broken, so a teacher marked this one by hand.
+                com.nezzar.nfcattendance.data.Tap(
+                    "04A1B2C4",
+                    start + 120_000L,
+                    com.nezzar.nfcattendance.data.AttendanceMethod.MANUAL,
+                ),
+            ),
+        )
+        val buffer = ByteArrayOutputStream()
+        XlsxWriter.write(buffer, ReportBuilder.sheets(session))
+        val book = XlsxReader.read(ByteArrayInputStream(buffer.toByteArray()))
+
+        val present = book.sheet("Present")!!
+        assertEquals("NFC", present[2][4])
+        assertEquals("Manual", present[3][4])
+        // And the conclusion sheet says how many presences were recorded by hand.
+        assertTrue(
+            book.sheet("Absent")!!.any { row -> row.size >= 2 && row[0] == "Recorded by hand" && row[1] == "1" },
+        )
     }
 
     @Test

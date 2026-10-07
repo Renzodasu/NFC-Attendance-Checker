@@ -203,11 +203,6 @@ fun NewSectionScreen(state: AppState, modifier: Modifier = Modifier) {
             item(key = "preview") { ImportPreview(state, plan, parsed) }
         }
 
-        item(key = "close") {
-            TextButton(onClick = { state.closeOverlay() }, modifier = Modifier.fillMaxWidth()) {
-                Text("Close")
-            }
-        }
     }
 }
 @Composable
