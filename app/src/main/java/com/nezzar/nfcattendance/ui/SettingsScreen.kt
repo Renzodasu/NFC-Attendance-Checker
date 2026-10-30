@@ -1,7 +1,6 @@
 package com.nezzar.nfcattendance.ui
 
 import com.nezzar.nfcattendance.BuildConfig
-import com.nezzar.nfcattendance.data.VisualStyle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -20,10 +19,17 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nezzar.nfcattendance.data.ChartKind
+import com.nezzar.nfcattendance.data.CrashLog
 import com.nezzar.nfcattendance.data.HapticStrength
 import com.nezzar.nfcattendance.ui.theme.ThemeMode
 
@@ -35,6 +41,11 @@ import com.nezzar.nfcattendance.ui.theme.ThemeMode
 @Composable
 fun SettingsScreen(state: AppState, modifier: Modifier = Modifier) {
     val listState = rememberLazyListState()
+
+    // A crash is written down before the process dies. If one was recorded, this
+    // page is where it surfaces - it never leaves the phone.
+    val context = LocalContext.current
+    var crash by remember { mutableStateOf(CrashLog.last(context)) }
 
     LazyColumn(
         state = listState,
@@ -187,10 +198,16 @@ fun SettingsScreen(state: AppState, modifier: Modifier = Modifier) {
                     )
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        text = "Beep when a card is read",
+                        text = "Sound on every read",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
+                Spacer(Modifier.height(8.dp))
+                Note(
+                    "Each answer has its own tone: present, late, already counted, not on " +
+                        "this roster. It plays at media volume, so a silenced ringer does not " +
+                        "hide the tap that failed."
+                )
             }
         }
 
@@ -220,34 +237,38 @@ fun SettingsScreen(state: AppState, modifier: Modifier = Modifier) {
             }
         }
 
+        // Only present when there is something to read: a permanent "no crash"
+        // card would be one more thing on a page nobody opens twice.
+        if (crash != null) {
+            item(key = "diagnostics") {
+                BrandCard {
+                    SectionLabel("Diagnostics")
+                    Spacer(Modifier.height(8.dp))
+                    Text("Last crash", style = MaterialTheme.typography.titleSmall)
+                    Note("This is the only record of it, and it stays on this phone.")
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = crash.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 16,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = {
+                            CrashLog.clear(context)
+                            crash = null
+                        }
+                    ) { Text("Clear it") }
+                }
+            }
+        }
+
         // Real controls, but cosmetic or calibration: not what Settings is opened for.
         item(key = "advanced") {
             BrandCard {
                 SectionLabel("Advanced")
                 Spacer(Modifier.height(10.dp))
-                Text("Section style", style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(
-                        VisualStyle.CARDS to "Cards",
-                        VisualStyle.PLAIN to "Plain",
-                        VisualStyle.SOLIDS to "Solids",
-                    ).forEach { (style, label) ->
-                        val chosen = state.visualStyle == style
-                        if (chosen) {
-                            Button(
-                                onClick = { state.useVisualStyle(style) },
-                                modifier = Modifier.weight(1f),
-                            ) { Text(label, maxLines = 1) }
-                        } else {
-                            OutlinedButton(
-                                onClick = { state.useVisualStyle(style) },
-                                modifier = Modifier.weight(1f),
-                            ) { Text(label, maxLines = 1) }
-                        }
-                    }
-                }
-                Spacer(Modifier.height(16.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(
                         checked = state.uidReversed,

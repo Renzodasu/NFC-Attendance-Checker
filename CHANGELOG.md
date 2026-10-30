@@ -4,6 +4,90 @@ All notable changes to NFC Attendance Checker. This project follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and uses date-based
 versions in the form `0.0.N`.
 
+## [0.0.6] - 2026-10-30
+
+### Added
+
+- **A friendly face: class plates instead of playing cards.** The class list is
+  now a grid of plates - the class **name** at reading size, the **subject** as
+  one grey line, the roster count at the bottom, and a two-letter **mark derived
+  from the name** (`Grade 3 - Rizal` reads `3R`, `BSCE-4B` reads `4B`). The
+  mark is computed, never chosen, so it cannot drift from its class and no class
+  ever runs out of faces. Plates in a row size themselves to the taller one, so a
+  two-line name grows both instead of clipping the count.
+- **Every read has a sound.** Five tones are generated on the phone, so nothing
+  has to be bundled or licensed: a clean tick for on time, a two-note rise for
+  late, a low double knock for a card already counted, a buzz for a card that is
+  not on the roster, and one long tone when there was nothing to record against
+  (no session, paused, invalid). They stream as media, so a silenced ringer still
+  plays them, and Settings has a **Sound on every read** switch.
+- **The reader bar tells the truth.** A new pure rule decides what the top of the
+  Scan and Register pages says: if NFC is off the bar reads **NFC is off**, if the
+  phone has no adapter it says so, and a **paused** session is the only place that
+  says paused. Pause wins over everything - a reader switched off on purpose is
+  not a fault.
+- **Turn on NFC from the app.** The system offers no API to switch NFC on, so the
+  button opens the shortest settings surface that answers: the quick-settings
+  panel on Android 10+, the NFC settings page on older phones, resolved through
+  the package manager and never crashing a page when a ROM has neither.
+- **A last crash, written down.** An uncaught exception now saves one stack trace
+  to the app's own private storage before the process dies (the system's own
+  dialog and kill are untouched). Settings shows the **Last crash** card only when
+  there is one, with the text and a Clear action - so "it closed by itself" can
+  arrive with the words the system actually used.
+- **Legacy `.xls` import.** The roster importer now reads real OLE2/BIFF8
+  workbooks as well as `.xlsx`: sectors and FAT, the shared-string table across
+  CONTINUE records, LABEL, LABELSST, NUMBER, RK, MULRK, FORMULA and STRING cells,
+  whole numbers kept whole (no phantom decimal tail), and hard caps on size, rows
+  and columns. The class screen's import accepts `.xlsx` or `.xls`.
+- **Display type.** Three display styles (34, 42, 52 sp) were added to the
+  Spectral family, because nothing above 34 sp existed and any larger heading
+  silently fell back to Roboto.
+
+### Changed
+
+- **The class list is a grid, not a carousel.** The old shelf showed one
+  full-screen card per swipe and required a face to be memorised; the grid shows
+  every class at once, at a glance, while standing in front of forty students.
+  The chosen class is the only one with a green edge and a green mark.
+- **Search finds by name and subject.** The old search also matched a card face,
+  which was the one field a teacher never remembers.
+- **The guide is six plain steps.** Numbered steps with a plain title and body,
+  a **Step n of 6** label and a Next/Back footer, replacing the deck of cards with
+  suits in the corner. Finishing it lands on **Start using the app**.
+- **New class** no longer asks for a suit and rank: a class is its name and its
+  subject, and the import note now says `.xlsx` or `.xls`.
+- **Screens show the class itself.** The header pill, the Scan result header and
+  the Report result card carry the class mark and name, so identity no longer
+  depends on remembering a symbol.
+
+### Removed
+
+- The playing-card deck: `PlayingCards.kt`, `FacePicker.kt`, `CardIndex.kt`,
+  `SectionFace.kt` and `VisualStyle.kt`, with their tests (`VisualStyleTest.kt`
+  and the card-face case in `SectionsTest.kt`).
+- The **Section style** setting, and with it Plain / Cards / Solids. There is one
+  look now, and it is the same on every screen.
+- The `card` field from what the app writes: existing `sections.json` files still
+  read, the value is simply ignored and dropped on the next save. Learner rows
+  are untouched, because binding is by card UID and never by face.
+
+### Fixed
+
+- **Learner files no longer travel to the cloud.** The app promised "nothing is
+  uploaded" while Android's auto-backup was copying the class list, the UIDs and
+  every session to Google Drive. Both backup policies now exclude the learner
+  directory, the exported reports, and device-to-phone transfer: the app's own
+  export is the supported way a record moves.
+- **A mark like `3A` no longer paints `33`.** The initial was taken from the first
+  alphanumeric character of the noun, so a noun that started with a digit
+  (`BSCE-3A`) repeated the grade. The first **letter** is preferred now, with the
+  digit kept only for a noun that has no letters at all.
+- **A two-line class name no longer clips the roster count** on its plate.
+- **Two `.xls` reader defects** were caught by the new tests before release:
+  wrong BOUNDSHEET field offsets (every workbook reported no worksheet) and a
+  shared-string read that could straddle a record edge on a wide character.
+
 ## [0.0.4] - 2026-10-07
 
 ### Added

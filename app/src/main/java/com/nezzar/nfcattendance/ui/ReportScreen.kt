@@ -58,6 +58,18 @@ fun ReportScreen(state: AppState) {
                 )
             }
         } else {
+            // The report opens on the class, not on a number: whose session this is has
+            // to be readable before the tiles are read.
+            item(key = "class") {
+                ClassIdentity(
+                    name = session.sectionName,
+                    subject = state.sections.firstOrNull { it.name == session.sectionName }?.subject,
+                    selected = true,
+                    badgeSize = 52.dp,
+                    nameStyle = MaterialTheme.typography.headlineSmall,
+                )
+            }
+
             item(key = "stats") {
                 BrandCard {
                     SectionLabel("Result")

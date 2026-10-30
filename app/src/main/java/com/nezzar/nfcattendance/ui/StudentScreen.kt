@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 import com.nezzar.nfcattendance.R
 import com.nezzar.nfcattendance.data.QrCode
@@ -38,10 +39,13 @@ fun StudentScreen(state: AppState, uid: String, modifier: Modifier = Modifier) {
     val student = section?.students?.firstOrNull { it.uid == uid }
     var name by remember(uid, student?.name) { mutableStateOf(student?.name ?: "") }
     var confirmRemove by remember(uid) { mutableStateOf(false) }
+    // True while the name field holds the keyboard.
+    var typing by remember(uid) { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
-    // The Name card is the second block on the page: keep it clear of the keyboard.
-    RevealTypingField(listState = listState, index = 2, active = student != null)
+    // The Name card is the fourth block on the page (after the title, the card
+    // and the QR code): keep THAT one clear of the keyboard, not the one before it.
+    RevealTypingField(listState = listState, index = if (typing) 3 else null, active = typing)
 
     LazyColumn(
         state = listState,
@@ -105,7 +109,9 @@ fun StudentScreen(state: AppState, uid: String, modifier: Modifier = Modifier) {
                         onValueChange = { name = it },
                         label = { Text("Student name") },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { typing = it.isFocused },
                     )
                     Spacer(Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

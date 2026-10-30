@@ -41,8 +41,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nezzar.nfcattendance.R
 import com.nezzar.nfcattendance.data.AttendanceMethod
+import com.nezzar.nfcattendance.data.NfcAlarm
 import com.nezzar.nfcattendance.data.ReportBuilder
-import com.nezzar.nfcattendance.nfc.NfcState
+import com.nezzar.nfcattendance.data.alarmHeadline
+import com.nezzar.nfcattendance.data.nfcAlarm
+import com.nezzar.nfcattendance.data.readerLine
 
 @Composable
 fun ScanScreen(state: AppState, activity: Activity) {
@@ -59,7 +62,7 @@ fun ScanScreen(state: AppState, activity: Activity) {
     Column(modifier = Modifier.fillMaxSize()) {
         // What was just read, above everything and outside the scroll: the one fact
         // this screen exists to deliver, and it no longer hides under the fold.
-        LastReadBar(state)
+        LastReadBar(state, activity)
 
     LazyColumn(
         state = listState,
@@ -70,7 +73,7 @@ fun ScanScreen(state: AppState, activity: Activity) {
         item(key = "title") {
             CollapsingTitle(
                 title = "Scan attendance",
-                subtitle = "Tap each student ID once. A card read twice in 3 seconds counts once.",
+                subtitle = "Tap each student ID once. A card counts once per session - a second tap is flagged, never counted twice.",
                 listState = listState,
             )
         }
@@ -116,31 +119,36 @@ fun ScanScreen(state: AppState, activity: Activity) {
                         QrReader(state)
                     }
                 } else {
-                    val readerLine = when {
-                        nfc == NfcState.UNSUPPORTED ->
-                            "No NFC adapter on this device (an emulator never has one)."
-                        nfc == NfcState.DISABLED ->
-                            "NFC adapter is present but switched off in system settings."
-                        state.paused ->
-                            "Paused - the reader is off and taps are ignored. Press Resume when the " +
-                                "class (or a late arrival) is ready."
-                        else ->
-                            "Reader mode active - hold each student ID to the phone's NFC antenna."
-                    }
                     // The reader's sentence turns with the hardware and with Pause, not
                     // with a tap: it cross-fades so the eye follows what changed.
                     Crossfade(
-                        targetState = readerLine,
+                        targetState = readerLine(nfc, state.paused),
                         animationSpec = tween(MotionTouchMs, easing = EmphasizedDecelerate),
                         label = "readerLine",
                     ) { line ->
                         Text(text = line, style = MaterialTheme.typography.bodyMedium)
                     }
+                    // A sentence that names the fix is a promise; the button is the way
+                    // to keep it. Only for a radio that is off - a phone without the
+                    // hardware has nothing to switch on.
+                    if (state.scanMode == ReaderMode.NFC && nfcAlarm(nfc, state.paused) == NfcAlarm.RADIO_OFF) {
+                        Spacer(Modifier.height(10.dp))
+                        NfcOffAction(activity)
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
-                // One line for the class: the header pill and the shelf already name it.
+                // The class this session belongs to, in the one band that stays on screen
+                // while the reader is held over a card.
+                ClassIdentity(
+                    name = section?.name ?: "",
+                    subject = null,
+                    selected = section != null,
+                    badgeSize = 30.dp,
+                    nameStyle = MaterialTheme.typography.titleSmall,
+                )
+                Spacer(Modifier.height(2.dp))
                 Text(
-                    text = (section?.name ?: "No section selected") + "  ·  " +
+                    text = if (section == null) "No class selected yet" else
                         state.roster.size.toString() + " registered",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -262,6 +270,68 @@ fun ScanScreen(state: AppState, activity: Activity) {
             }
         }
 
+        // Skip and flag: a tap the app could not place is never dropped and never
+        // silently swallowed. It waits here, by name of the card, until the line has
+        // gone in and the teacher has a free hand to give it a name.
+        item(key = "attention") {
+            val flagged = state.unmatchedTaps()
+            if (flagged.size > state.attentionSeen) {
+                BrandCard {
+                    SectionLabel("Needs attention")
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "These taps belong to nobody on " + (section?.name ?: "this roster") +
+                            ". They are saved, not dropped - give each card a name, or mark the " +
+                            "student by hand from the roster.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    flagged.take(8).forEach { tap ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Text(
+                                text = ReportBuilder.timeText(tap.atMillis),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.width(64.dp),
+                            )
+                            Text(
+                                text = tap.uid,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = tap.method.label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    if (flagged.size > 8) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = "and " + (flagged.size - 8) + " more - they are in the report too.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = { state.dismissAttention() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Mark as seen")
+                    }
+                }
+            }
+        }
+
     }
     }
 }
@@ -272,10 +342,18 @@ fun ScanScreen(state: AppState, activity: Activity) {
  * has. Undo lives here too, because a wrong tap is noticed right here.
  */
 @Composable
-private fun LastReadBar(state: AppState) {
+private fun LastReadBar(state: AppState, activity: Activity) {
     val last = state.lastRead
     val taps = state.session?.taps?.size ?: 0
     val show = state.running || last != null
+    // The radio outranks the last card: "Ready - waiting for the first card" while
+    // the antenna is deaf is the lie this bar exists to stop. In QR mode the radio
+    // is not the reader at all, so there is nothing to warn about.
+    val alarm = if (state.scanMode == ReaderMode.NFC) {
+        nfcAlarm(state.nfcState, state.paused)
+    } else {
+        NfcAlarm.NONE
+    }
 
     AnimatedVisibility(
         visible = show,
@@ -298,7 +376,7 @@ private fun LastReadBar(state: AppState) {
             ) {
                 NfcLight(state, dot = 8.dp)
                 Column(modifier = Modifier.weight(1f)) {
-                    val headline = when {
+                    val headline = alarmHeadline(alarm) ?: when {
                         last == null -> "Ready - waiting for the first card"
                         last.duplicate -> "Already recorded: " + (last.name ?: last.uid)
                         last.method == AttendanceMethod.MANUAL -> "Marked by hand: " + (last.name ?: last.uid)
@@ -331,8 +409,18 @@ private fun LastReadBar(state: AppState) {
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                TextButton(onClick = { state.undoLastTap() }, enabled = taps > 0) {
-                    Text("Undo")
+                if (alarm == NfcAlarm.RADIO_OFF) {
+                    // The slot Undo occupies is dead at zero taps anyway; while the
+                    // radio is off it belongs to the one verb that changes anything.
+                    TextButton(onClick = { openNfcSettings(activity) }) {
+                        Text("Turn on NFC")
+                    }
+                } else {
+                    // No switch to offer on a phone without the hardware; Undo still
+                    // matters there, because manual marks can still be undone.
+                    TextButton(onClick = { state.undoLastTap() }, enabled = taps > 0) {
+                        Text("Undo")
+                    }
                 }
             }
         }

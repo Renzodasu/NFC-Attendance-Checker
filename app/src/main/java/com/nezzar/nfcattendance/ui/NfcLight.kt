@@ -115,7 +115,7 @@ private fun Modifier.nfcLightGlow(
     if (!enabled || !glow.standby) return this
 
     val transition = rememberInfiniteTransition(label = "nfcLight")
-    val breath by transition.animateFloat(
+    val breath = transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
@@ -131,10 +131,11 @@ private fun Modifier.nfcLightGlow(
         swell.animateTo(0f, tween(durationMillis = 1100, easing = FastOutSlowInEasing))
     }
 
-    val landed = swell.value
-    val quiet = 0.62f + 0.38f * breath
-
     return this.drawBehind {
+        // Read in the draw lambda, not in composition: a lit light must not
+        // recompose the screen it sits on every frame.
+        val landed = swell.value
+        val quiet = 0.62f + 0.38f * breath.value
         val centre = Offset(size.width / 2f, size.height / 2f)
         val radius = dot.toPx() / 2f
         val reach = 6.dp.toPx() * quiet + 16.dp.toPx() * landed
@@ -156,7 +157,7 @@ private fun Modifier.nfcLightGlow(
         }
 
         repeat(3) { index ->
-            val phase = (breath + index / 3f) % 1f
+            val phase = (breath.value + index / 3f) % 1f
             val alpha = (1f - phase) * (1f - phase) * (0.30f + 0.30f * landed)
             drawCircle(
                 color = colour.copy(alpha = alpha),

@@ -54,7 +54,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import com.nezzar.nfcattendance.R
-import com.nezzar.nfcattendance.nfc.NfcState
+import com.nezzar.nfcattendance.data.NfcAlarm
+import com.nezzar.nfcattendance.data.nfcAlarm
+import com.nezzar.nfcattendance.data.readerLine
 
 @Composable
 fun RegisterScreen(state: AppState, activity: Activity, modifier: Modifier = Modifier) {
@@ -122,18 +124,10 @@ fun RegisterScreen(state: AppState, activity: Activity, modifier: Modifier = Mod
                     SectionLabel("Reader")
                 }
                 Spacer(Modifier.height(6.dp))
-                val readerLine = when (nfc) {
-                    NfcState.UNSUPPORTED ->
-                        "No NFC adapter on this device (an emulator never has one)."
-                    NfcState.DISABLED ->
-                        "NFC adapter is present but switched off in system settings."
-                    NfcState.ENABLED ->
-                        "Reader mode active - hold the ID card to the phone's NFC antenna."
-                }
                 // The reader's sentence turns with the hardware, not with a tap:
                 // it cross-fades so the eye follows what changed.
                 Crossfade(
-                    targetState = readerLine,
+                    targetState = readerLine(nfc, paused = false, registering = true),
                     animationSpec = tween(MotionTouchMs, easing = EmphasizedDecelerate),
                     label = "readerLine",
                 ) { line ->
@@ -270,13 +264,40 @@ fun RegisterScreen(state: AppState, activity: Activity, modifier: Modifier = Mod
                 }
             }
         } else if (register.armed) {
-            item(key = "waiting", contentType = "liveCard") {
-                Box(modifier = Modifier.animateItem()) {
-                    EmptyState(
-                        icon = R.drawable.ic_nav_register,
-                        title = "Waiting for a card",
-                        body = "Hold the student ID flat against the phone's NFC antenna.",
-                    )
+            // Armed means the app is ready to read; it must not be the only thing
+            // that is. With the radio off the page says so and offers the switch,
+            // instead of holding the teacher's hand over a dead antenna.
+            when (nfcAlarm(nfc, paused = false)) {
+                NfcAlarm.RADIO_OFF -> item(key = "waiting-radio-off", contentType = "liveCard") {
+                    Box(modifier = Modifier.animateItem()) {
+                        EmptyState(
+                            icon = R.drawable.ic_nav_register,
+                            title = "NFC is off",
+                            body = "No card can be read until it is switched on. Turn it on, come " +
+                                "back, and the reader re-arms itself.",
+                            actionLabel = "Turn on NFC",
+                            onAction = { openNfcSettings(activity) },
+                        )
+                    }
+                }
+                NfcAlarm.NO_HARDWARE -> item(key = "waiting-no-nfc", contentType = "liveCard") {
+                    Box(modifier = Modifier.animateItem()) {
+                        EmptyState(
+                            icon = R.drawable.ic_nav_register,
+                            title = "No NFC reader on this phone",
+                            body = "Registration taps need the antenna. Import a roster instead, or " +
+                                "take attendance with the QR reader on the Scan page.",
+                        )
+                    }
+                }
+                NfcAlarm.NONE -> item(key = "waiting", contentType = "liveCard") {
+                    Box(modifier = Modifier.animateItem()) {
+                        EmptyState(
+                            icon = R.drawable.ic_nav_register,
+                            title = "Waiting for a card",
+                            body = "Hold the student ID flat against the phone's NFC antenna.",
+                        )
+                    }
                 }
             }
         } else {

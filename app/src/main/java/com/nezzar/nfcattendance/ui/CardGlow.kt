@@ -53,7 +53,7 @@ fun Modifier.cardGlow(accent: Color, glow: CardGlow, enabled: Boolean): Modifier
 
     // The slow breath of the standby pulse: 1.8 s out, 1.8 s back.
     val transition = rememberInfiniteTransition(label = "cardGlow")
-    val breath by transition.animateFloat(
+    val breath = transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
@@ -72,11 +72,14 @@ fun Modifier.cardGlow(accent: Color, glow: CardGlow, enabled: Boolean): Modifier
         swell.animateTo(0f, tween(durationMillis = 1100, easing = FastOutSlowInEasing))
     }
 
-    val landed = swell.value
-    // The breath dips but never goes dark: the card stays lit while it listens.
-    val quiet = 0.62f + 0.38f * breath
-
     return this.drawBehind {
+        // The animated values are read HERE, not in composition. A read in the
+        // draw lambda invalidates one frame; a read above it recomposes this
+        // card sixty times a second, which is what made typing crawl on the very
+        // page this card sits above.
+        val landed = swell.value
+        // The breath dips but never goes dark: the card stays lit while it listens.
+        val quiet = 0.62f + 0.38f * breath.value
         val corner = 14.dp.toPx()
         // Standby reaches a clear ring past the card; a landed card throws the
         // light well past its shadow, which is the moment worth noticing.
@@ -104,7 +107,7 @@ fun Modifier.cardGlow(accent: Color, glow: CardGlow, enabled: Boolean): Modifier
 
         // The radiating waves: three rings leave the edge together and fade as they go.
         repeat(3) { index ->
-            val phase = (breath + index / 3f) % 1f
+            val phase = (breath.value + index / 3f) % 1f
             val spread = phase * (reach + 8.dp.toPx())
             val alpha = (1f - phase) * (1f - phase) * (0.26f + 0.30f * landed)
             drawRoundRect(

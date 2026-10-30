@@ -23,11 +23,9 @@ data class Section(
     val updatedAt: Long = 0L,
     /**
      * What the class is about - "Surveying", "Hydraulics". Optional, and unique to
-     * this section: it travels with the roster file and shows on the section card.
+     * this section: it travels with the roster file and shows on the class plate.
      */
     val subject: String = "",
-    /** This section's face from the 52-card deck, e.g. "7♦". Random, then fixed. */
-    val card: String = "",
 )
 
 data class Tap(

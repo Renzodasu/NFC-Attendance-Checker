@@ -5,6 +5,8 @@ import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.nfc.tech.NfcA
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 
 /**
  * What the phone's NFC hardware is doing right now - the three lights the UI
@@ -33,6 +35,14 @@ class NfcScanner(private val activity: Activity) {
 
     private val adapter: NfcAdapter? = NfcAdapter.getDefaultAdapter(activity)
 
+    /**
+     * Reader callbacks arrive on the NFC binder thread, but everything they touch -
+     * Compose state, haptics, the tone - lives on the main thread. A tap that
+     * arrives while the UI is recomposing is normal at the door, so the read is
+     * handed over instead of being executed where it landed.
+     */
+    private val main = Handler(Looper.getMainLooper())
+
     fun isSupported(): Boolean = adapter != null
 
     fun isEnabled(): Boolean = adapter?.isEnabled == true
@@ -40,8 +50,13 @@ class NfcScanner(private val activity: Activity) {
     /** The reader's state as one value, for the light the UI draws. */
     fun state(): NfcState = nfcStateOf(isSupported(), isEnabled())
 
-    fun start(onUid: (ByteArray) -> Unit) {
-        val nfc = adapter ?: return
+    /**
+     * Arms reader mode. Returns false when the adapter is gone or the platform
+     * refuses to arm (the radio was switched off between the state read and this
+     * call), so the caller never has to guard an exception on a tap.
+     */
+    fun start(onUid: (ByteArray) -> Unit): Boolean {
+        val nfc = adapter ?: return false
         val flags = NfcAdapter.FLAG_READER_NFC_A or
             NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK or
             NfcAdapter.FLAG_READER_NO_PLATFORM_SOUNDS
@@ -49,9 +64,16 @@ class NfcScanner(private val activity: Activity) {
             // NfcA confirms this is an NFC-A (ISO 14443-3A) tag; the UID itself
             // comes from Tag.getId() - sector 0 is world-readable, no keys involved.
             val id: ByteArray? = if (NfcA.get(tag) != null) tag.id else null
-            if (id != null && id.isNotEmpty()) onUid(id)
+            if (id != null && id.isNotEmpty()) main.post { onUid(id) }
         }
-        nfc.enableReaderMode(activity, callback, flags, Bundle())
+        return try {
+            nfc.enableReaderMode(activity, callback, flags, Bundle())
+            true
+        } catch (t: Exception) {
+            // IllegalArgumentException/UnsupportedOperationException when the radio
+            // died in between: a page that cannot read is bad, a crash is worse.
+            false
+        }
     }
 
     fun stop() {

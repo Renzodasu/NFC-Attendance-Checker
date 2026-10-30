@@ -8,13 +8,12 @@ import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.nezzar.nfcattendance.data.AttendanceResolver
 import com.nezzar.nfcattendance.data.HapticStrength
-import com.nezzar.nfcattendance.data.PlayingCards
-import com.nezzar.nfcattendance.data.VisualStyle
 import com.nezzar.nfcattendance.data.AttendanceSession
 import com.nezzar.nfcattendance.data.DocumentsExport
 import com.nezzar.nfcattendance.data.RegisterFlow
@@ -25,10 +24,12 @@ import com.nezzar.nfcattendance.data.RosterImporter
 import com.nezzar.nfcattendance.data.Section
 import com.nezzar.nfcattendance.data.Sections
 import com.nezzar.nfcattendance.data.Sheet
+import com.nezzar.nfcattendance.data.startStatusText
 import com.nezzar.nfcattendance.data.Store
 import com.nezzar.nfcattendance.data.Student
 import com.nezzar.nfcattendance.data.Tap
 import com.nezzar.nfcattendance.data.Uid
+import com.nezzar.nfcattendance.data.XlsReader
 import com.nezzar.nfcattendance.data.XlsxReader
 import com.nezzar.nfcattendance.data.XlsxWriter
 import com.nezzar.nfcattendance.data.AttendanceMethod
@@ -38,6 +39,8 @@ import com.nezzar.nfcattendance.data.ChartKind
 import com.nezzar.nfcattendance.data.Outcome
 import com.nezzar.nfcattendance.data.ProcessedAttendance
 import com.nezzar.nfcattendance.data.QrCode
+import com.nezzar.nfcattendance.data.ReadCue
+import com.nezzar.nfcattendance.data.cueFor
 import com.nezzar.nfcattendance.nfc.NfcState
 import com.nezzar.nfcattendance.ui.theme.ThemeMode
 import androidx.lifecycle.AndroidViewModel
@@ -144,9 +147,6 @@ class AppState(application: Application) : AndroidViewModel(application) {
         cardFlight = shelfCardRect
     }
 
-    /** The section texture: the playing deck by default, or the engineering sheet. */
-    var visualStyle by mutableStateOf(VisualStyle.CARDS)
-
     /** How hard a card read buzzes, and whether it beeps. */
     var hapticStrength by mutableStateOf(HapticStrength.NORMAL)
     var scanSound by mutableStateOf(true)
@@ -189,6 +189,25 @@ class AppState(application: Application) : AndroidViewModel(application) {
     /** The last card the reader saw, for the sticky line on the Scan tab. */
     var lastRead by mutableStateOf<LastRead?>(null)
 
+    /**
+     * What the last read should sound like, and a counter that changes on every
+     * single one. The UI plays [lastCue] whenever [cueSeq] moves - that is the
+     * whole contract, so a duplicate, a stranger or a refusal is as audible as a
+     * good read instead of only the reads that changed the count.
+     */
+    var lastCue by mutableStateOf<ReadCue?>(null)
+        private set
+    var cueSeq by mutableIntStateOf(0)
+        private set
+
+    /**
+     * How many unmatched taps the teacher has already looked at. The needs-attention
+     * card hides once dismissed and comes back by itself when a NEW one lands - so
+     * "skip and flag" never turns into "flag and forget".
+     */
+    var attentionSeen by mutableIntStateOf(0)
+        private set
+
     /** Why the last QR scan was refused, if it was: cleared by the next good read. */
     var qrNotice by mutableStateOf<String?>(null)
 
@@ -209,9 +228,13 @@ class AppState(application: Application) : AndroidViewModel(application) {
     /** The instant a card actually landed, so the chosen card can swell on the beat. */
     var lastCardReadAt by mutableStateOf(0L)
 
-    /** True while the app is listening for cards: registering, or a live session. */
+    /**
+     * True while the app is actually listening for cards: registering, or a live
+     * session, on a radio that is switched on. A card that breathes while the
+     * antenna is deaf would repeat the lie the old beep told.
+     */
     val listeningForCards: Boolean
-        get() = registerState.armed || (running && !paused)
+        get() = nfcState == NfcState.ENABLED && (registerState.armed || (running && !paused))
 
     /** What the chosen card should be doing right now: a standby pulse, a swell per read. */
     val cardGlow: CardGlow
@@ -220,6 +243,12 @@ class AppState(application: Application) : AndroidViewModel(application) {
     /** A card landed - registered or scanned - so the chosen card swells once. */
     fun noteCardRead() {
         lastCardReadAt = System.currentTimeMillis()
+    }
+
+    /** Every read asks for its sound here, whichever reader produced it. */
+    fun noteCue(cue: ReadCue) {
+        lastCue = cue
+        cueSeq += 1
     }
 
     // The phone's reader ------------------------------------------------------
@@ -246,7 +275,6 @@ class AppState(application: Application) : AndroidViewModel(application) {
             else -> ThemeMode.DARK
         }
         lateAfterMinutes = store.lateAfterMinutes()
-        visualStyle = VisualStyle.fromStored(store.visualStyle())
         hapticStrength = HapticStrength.fromStored(store.hapticStrength())
         scanSound = store.isScanSoundOn()
         scanMode = if (store.readerMode().equals("qr", ignoreCase = true)) ReaderMode.QR else ReaderMode.NFC
@@ -255,7 +283,6 @@ class AppState(application: Application) : AndroidViewModel(application) {
             "bar" -> ChartKind.BAR
             else -> ChartKind.PIE
         }
-        dealMissingCards()
         // Very first launch of this install: show the four steps, then never again.
         if (!store.hasSeenTutorial()) {
             overlay = Overlay.TUTORIAL
@@ -280,34 +307,12 @@ class AppState(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * Sections restored from a file written before cards existed get dealt one.
-     * Never runs while the file is unreadable - that is exactly the moment a save
-     * would replace whatever the file still holds.
-     */
-    private fun dealMissingCards() {
-        if (sectionsBroken != null) return
-        if (sections.none { it.card.isBlank() }) return
-        val taken = sections.map { it.card }.filter { it.isNotBlank() }.toMutableSet()
-        sections = sections.map { section ->
-            if (section.card.isNotBlank()) {
-                section
-            } else {
-                val face = PlayingCards.pick(taken)
-                taken += face
-                section.copy(card = face)
-            }
-        }
-        store.saveSections(sections)
-    }
-
     /** Try the class list again - a failed read should be recoverable, not fatal. */
     fun retryLoadSections() {
         val loaded = store.loadSections()
         sectionsBroken = loaded.error
         if (loaded.error != null) return
         sections = loaded.sections
-        dealMissingCards()
         ensureSelection()
         sectionsMessage = if (sections.isEmpty()) {
             "Nothing to restore - the file is readable and empty."
@@ -346,8 +351,8 @@ class AppState(application: Application) : AndroidViewModel(application) {
 
     // ------------------------------------------------------------------ sections
 
-    fun createSection(rawName: String, subject: String = "", card: String = "") {
-        val edit = Sections.create(sections, rawName, subject = subject, card = card)
+    fun createSection(rawName: String, subject: String = "") {
+        val edit = Sections.create(sections, rawName, subject = subject)
         applyEdit(edit)
         if (edit.error.isEmpty()) {
             val created = rawName.trim()
@@ -380,37 +385,20 @@ class AppState(application: Application) : AndroidViewModel(application) {
     fun useSubject(subject: String) = applyEdit(Sections.setSubject(sections, selectedName, subject))
 
     /**
-     * The Manage page saves the whole section at once - name, subject and card
-     * face - because one Save button that means everything is easier to trust
-     * than three that each mean a part. The name goes first: the other two
-     * address the section by it.
+     * The Manage page saves the whole class at once - name and subject - because
+     * one Save button that means everything is easier to trust than two that each
+     * mean a part. The name goes first: the subject addresses the class by it.
      *
-     * Everything that can be refused is refused BEFORE anything is written, so a
-     * taken face or a blank name leaves the section exactly as it was.
+     * A name that would collide is refused BEFORE anything is written, so a
+     * duplicate leaves the class exactly as it was.
      */
-    fun saveSectionEdits(name: String, subject: String, suit: String, rank: String) {
+    fun saveSectionEdits(name: String, subject: String) {
         val target = selectedSection ?: return
-        if (suit.isNotEmpty() != rank.isNotEmpty()) {
-            sectionsError = "Pick both a symbol and a number, or leave the face as it is."
-            return
-        }
-        val face = if (suit.isNotEmpty() && rank.isNotEmpty()) rank + suit else ""
-        if (face.isNotEmpty() && face != target.card) {
-            val clash = sections.firstOrNull { it.name != target.name && it.card == face }
-            if (clash != null) {
-                sectionsError = clash.name + " already holds " + face + ". Pick another face."
-                return
-            }
-        }
         if (name.trim() != target.name) {
             renameSelectedSection(name)
             if (sectionsError.isNotEmpty()) return
         }
         useSubject(subject)
-        if (sectionsError.isNotEmpty()) return
-        if (face.isNotEmpty() && face != target.card) {
-            applyEdit(Sections.setCard(sections, selectedName, face))
-        }
     }
 
     fun renameStudent(uid: String, newName: String) =
@@ -454,11 +442,6 @@ class AppState(application: Application) : AndroidViewModel(application) {
         } else {
             "A card read more than " + minutes + " minute(s) after the start counts as late."
         }
-    }
-
-    fun useVisualStyle(value: VisualStyle) {
-        visualStyle = value
-        store.setVisualStyle(value.name.lowercase())
     }
 
     fun useHapticStrength(value: HapticStrength) {
@@ -565,7 +548,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
         reportError = null
         deliver(
             PendingExport.Kind.REPORT,
-            "attendance-" + current.sessionId + ".xlsx",
+            "attendance-" + safeFileName(current.sectionName) + "-" + current.sessionId + ".xlsx",
             bytes(ReportBuilder.sheets(current, sessionWindowMillis(current))),
         )
     }
@@ -661,12 +644,27 @@ class AppState(application: Application) : AndroidViewModel(application) {
 
     // -------------------------------------------------------------------- import
 
-    /** Reads a shared .xlsx picked through the system file picker. Nothing is saved yet. */
+    /**
+     * Reads a shared .xlsx or .xls picked through the system file picker.
+     * Nothing is saved yet. The format is decided by the bytes, not the name,
+     * because a school form renamed to .xlsx is still a BIFF file inside.
+     */
     fun stageImport(uri: Uri) {
         importError = ""
         try {
             val parsed = appContext.contentResolver.openInputStream(uri)?.use { stream ->
-                val book = XlsxReader.read(stream)
+                val bytes = stream.readBytes()
+                if (bytes.isEmpty()) throw IllegalArgumentException("That file is empty.")
+                if (bytes.size > XlsReader.MAX_BYTES) {
+                    throw IllegalArgumentException(
+                        "That file is too big to be a class list (" + bytes.size / 1024 + " KB)."
+                    )
+                }
+                val book = if (XlsReader.isXls(bytes)) {
+                    XlsReader.read(bytes)
+                } else {
+                    XlsxReader.read(bytes.inputStream())
+                }
                 val sheet = book.sheet(RosterImporter.SHEET_ROSTER)
                     ?: throw IllegalArgumentException(
                         "That workbook has no sheet named Roster. Sheets found: " +
@@ -751,10 +749,21 @@ class AppState(application: Application) : AndroidViewModel(application) {
         val asRead = Uid.canonical(bytes)
         val flipped = Uid.reversed(bytes)
         noteTap(asRead, flipped)
-        registerState = RegisterFlow.onTap(
+        noteCardRead()
+        val next = RegisterFlow.onTap(
             registerState,
             if (uidReversed) flipped else asRead,
             selectedSection,
+        )
+        registerState = next
+        noteCue(
+            when {
+                next.pendingUid == null -> ReadCue.REFUSED
+                // A card already on this roster is a read the app understood and
+                // must not record: the same low buzz the Scan tab uses for it.
+                next.duplicateOf != null -> ReadCue.UNKNOWN
+                else -> ReadCue.RECORDED
+            },
         )
     }
 
@@ -794,7 +803,10 @@ class AppState(application: Application) : AndroidViewModel(application) {
         reportUri = null
         lastTapKnown = null
         lastRead = null
-        statusText = "Session " + id + " started for " + section.name + ". Tap student IDs one by one."
+        attentionSeen = 0
+        // Starting is not arming: if the radio is off (or absent) the sentence has to
+        // say so, or the queue taps into a phone that cannot hear it.
+        statusText = startStatusText(id, section.name, nfcState)
         // On disk before the first card: a session that is lost now is lost for good.
         persistSession()
     }
@@ -804,7 +816,37 @@ class AppState(application: Application) : AndroidViewModel(application) {
         running = false
         paused = false
         persistSession()
-        statusText = "Session " + current.sessionId + " saved with " + current.taps.size + " tap(s)."
+        statusText = stopSummary(current)
+    }
+
+    /**
+     * The sentence the teacher reads after the line has gone in: who is still
+     * absent, by name, because that is the only thing she still has to do today.
+     */
+    private fun stopSummary(current: AttendanceSession): String {
+        val counts = AttendanceResolver.resolve(
+            roster = current.roster,
+            taps = current.taps,
+            startedAtMillis = current.startedAtMillis,
+            lateAfterMillis = sessionWindowMillis(current),
+        )
+        val absent = counts.absent.map { it.name }
+        val head = "Session " + current.sessionId + " saved: " +
+            counts.present.size + " present, " +
+            counts.late.size + " late, " +
+            absent.size + " absent."
+        val named = when {
+            absent.isEmpty() -> ""
+            absent.size <= 6 -> " Absent: " + absent.joinToString(", ") + "."
+            else -> " Absent: " + absent.take(6).joinToString(", ") +
+                " and " + (absent.size - 6) + " more."
+        }
+        val flagged = if (counts.unmatched.isEmpty()) {
+            ""
+        } else {
+            " " + counts.unmatched.size + " unmatched tap(s) still need a name."
+        }
+        return head + named + flagged
     }
 
     /**
@@ -815,6 +857,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
         val asRead = Uid.canonical(bytes)
         val flipped = Uid.reversed(bytes)
         noteTap(asRead, flipped)
+        noteCardRead()
         submitAttendance(if (uidReversed) flipped else asRead, AttendanceMethod.NFC)
     }
 
@@ -945,6 +988,9 @@ class AppState(application: Application) : AndroidViewModel(application) {
         current: AttendanceSession?,
     ) {
         statusText = result.message
+        // Every answer is audible, not only the ones that changed the count: a
+        // duplicate, a stranger and a refusal each have their own sound.
+        noteCue(cueFor(result.outcome, result.status))
         when (result.outcome) {
             Outcome.NO_SESSION, Outcome.PAUSED -> Unit
             else -> lastTapKnown = result.student != null
@@ -977,6 +1023,15 @@ class AppState(application: Application) : AndroidViewModel(application) {
             startedAtMillis = current.startedAtMillis,
             lateAfterMillis = sessionWindowMillis(current),
         )
+    }
+
+    /** Taps that belong to nobody on this roster, oldest first. */
+    fun unmatchedTaps(): List<Tap> =
+        resolved()?.unmatched?.sortedBy { it.atMillis }.orEmpty()
+
+    /** The teacher has read the needs-attention list; hide it until a new one lands. */
+    fun dismissAttention() {
+        attentionSeen = unmatchedTaps().size
     }
 
     /**

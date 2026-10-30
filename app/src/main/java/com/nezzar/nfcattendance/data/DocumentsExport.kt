@@ -20,6 +20,9 @@ import java.io.OutputStream
 object DocumentsExport {
 
     const val MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+    /** A workbook an older Excel saved: one binary file, no zip inside. */
+    const val MIME_XLS = "application/vnd.ms-excel"
     const val FOLDER = "Presencia"
 
     /** What was written, so the UI can show the path and offer a Share button. */

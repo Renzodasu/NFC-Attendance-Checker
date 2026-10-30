@@ -30,6 +30,33 @@ private val Spectral = FontFamily(
 )
 
 val Typography = Typography(
+    /**
+     * Display sizes were added in 0.0.6: nothing above 34sp existed before, so any
+     * attempt to set a big number or a class name at arm's length silently fell
+     * back to Roboto and lost the serif. These are the only sizes meant to be
+     * read across a room - a screen heading, a class name on its plate, a count.
+     */
+    displayLarge = TextStyle(
+        fontFamily = Spectral,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 52.sp,
+        lineHeight = 58.sp,
+        letterSpacing = (-0.6).sp,
+    ),
+    displayMedium = TextStyle(
+        fontFamily = Spectral,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 42.sp,
+        lineHeight = 48.sp,
+        letterSpacing = (-0.4).sp,
+    ),
+    displaySmall = TextStyle(
+        fontFamily = Spectral,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 34.sp,
+        lineHeight = 40.sp,
+        letterSpacing = (-0.2).sp,
+    ),
     headlineLarge = TextStyle(
         fontFamily = Spectral,
         fontWeight = FontWeight.SemiBold,

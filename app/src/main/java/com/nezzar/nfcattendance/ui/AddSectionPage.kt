@@ -1,6 +1,5 @@
 package com.nezzar.nfcattendance.ui
 
-import com.nezzar.nfcattendance.data.VisualStyle
 import androidx.compose.ui.unit.sp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -53,8 +52,6 @@ import com.nezzar.nfcattendance.data.RosterImporter
 fun NewSectionScreen(state: AppState, modifier: Modifier = Modifier) {
     var name by remember { mutableStateOf("") }
     var subject by remember { mutableStateOf("") }
-    var suit by remember { mutableStateOf("") }
-    var rank by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
     val pickWorkbook = rememberLauncherForActivityResult(
@@ -75,7 +72,7 @@ fun NewSectionScreen(state: AppState, modifier: Modifier = Modifier) {
     ) {
         item(key = "title") {
             CollapsingTitle(
-                title = "New section",
+                title = "New class",
                 subtitle = "One class, one subject, one roster.",
                 listState = listState,
             )
@@ -88,7 +85,7 @@ fun NewSectionScreen(state: AppState, modifier: Modifier = Modifier) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Section name (e.g. BSCE-4B)") },
+                    label = { Text("Class name (e.g. Grade 3 - Rizal)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -103,51 +100,20 @@ fun NewSectionScreen(state: AppState, modifier: Modifier = Modifier) {
                 Spacer(Modifier.height(8.dp))
                 Note(
                     "The subject says what the class is about. It travels with the roster file " +
-                        "and shows on the section card."
+                        "and shows under the class name."
                 )
-                if (state.visualStyle == VisualStyle.CARDS) {
-                    Spacer(Modifier.height(14.dp))
-                    SectionLabel("Card face")
-                    Spacer(Modifier.height(8.dp))
-                    // Two short fields; tapping either one reveals a single box
-                    // holding every symbol and every number, so a whole face is
-                    // set in one visit instead of two separate lists.
-                    FacePicker(
-                        suit = suit,
-                        rank = rank,
-                        onSuit = { suit = it },
-                        onRank = { rank = it },
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Note(
-                        "Pick a symbol and a number, or leave both on Any and the app deals " +
-                            "one no other class is holding."
-                    )
-                }
                 Spacer(Modifier.height(12.dp))
-                val chosenFace = rank + suit
-                val heldBy = if (chosenFace.length > 1) {
-                    state.sections.firstOrNull { it.card == chosenFace }?.name
-                } else {
-                    null
-                }
-                Button(
-                    onClick = {
-                        state.createSection(name, subject, chosenFace)
-                        if (state.sectionsError.isEmpty()) state.closeOverlay()
-                    },
-                    enabled = heldBy == null,
-                    modifier = Modifier.fillMaxWidth().height(54.dp),
-                ) {
-                    Text("Create section")
-                }
-                if (heldBy != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = heldBy + " already holds " + chosenFace + ". Pick another face.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
+                IfNameIsFree(state, name) {
+                    Button(
+                        onClick = {
+                            state.createSection(name, subject)
+                            if (state.sectionsError.isEmpty()) state.closeOverlay()
+                        },
+                        enabled = name.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth().height(54.dp),
+                    ) {
+                        Text("Create class")
+                    }
                 }
                 if (state.sectionsError.isNotEmpty()) {
                     Spacer(Modifier.height(8.dp))
@@ -169,6 +135,7 @@ fun NewSectionScreen(state: AppState, modifier: Modifier = Modifier) {
                         pickWorkbook.launch(
                             arrayOf(
                                 DocumentsExport.MIME_XLSX,
+                                DocumentsExport.MIME_XLS,
                                 "application/octet-stream",
                                 "*/*",
                             )
@@ -182,10 +149,14 @@ fun NewSectionScreen(state: AppState, modifier: Modifier = Modifier) {
                         modifier = Modifier.size(18.dp),
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text("Import a section from .xlsx")
+                    Text("Import a class from .xlsx or .xls")
                 }
                 Spacer(Modifier.height(8.dp))
-                Note("Cards are matched by UID, and the subject in the file comes with them.")
+                // A DepEd SF2 school form is NOT this format: importing one fails on the
+                // missing Name column. Say what actually works, so nobody promises a
+                // teacher her school form will open.
+                Note("Cards are matched by UID, and the subject in the file comes with them. " +
+                    "The file needs the app's own Roster sheet - a Presencia export shows the layout.")
                 if (state.importError.isNotEmpty()) {
                     Spacer(Modifier.height(8.dp))
                     Text(
@@ -205,6 +176,27 @@ fun NewSectionScreen(state: AppState, modifier: Modifier = Modifier) {
 
     }
 }
+/**
+ * A duplicate class name is the one refusal that can be known before the button
+ * is pressed, so the reason sits under the field instead of arriving as an error
+ * after Save. The Button stays enabled-and-refusing for a blank name only.
+ */
+@Composable
+private fun IfNameIsFree(state: AppState, name: String, content: @Composable () -> Unit) {
+    val clash = if (name.isBlank()) null else state.sections.firstOrNull {
+        it.name.equals(name.trim(), ignoreCase = true)
+    }
+    content()
+    if (clash != null) {
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "You already have a class called " + clash.name + ".",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+}
+
 @Composable
 private fun ImportPreview(state: AppState, plan: RosterImporter.Plan, parsed: RosterImporter.Parsed) {
     val appear = remember { MutableTransitionState(false).apply { targetState = true } }

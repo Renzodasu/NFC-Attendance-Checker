@@ -122,7 +122,6 @@ class Store(context: Context) {
                 students = students,
                 updatedAt = obj.optLong("updatedAt", 0L),
                 subject = obj.optString("subject", "").trim(),
-                card = obj.optString("card", "").trim(),
             )
         }
         return out
@@ -143,7 +142,6 @@ class Store(context: Context) {
             obj.put("students", students)
             obj.put("updatedAt", section.updatedAt)
             if (section.subject.isNotBlank()) obj.put("subject", section.subject)
-            if (section.card.isNotBlank()) obj.put("card", section.card)
             array.put(obj)
         }
         val root = JSONObject()
@@ -212,11 +210,6 @@ class Store(context: Context) {
     fun hapticStrength(): String = settings().optString("haptics", "normal")
 
     fun setHapticStrength(value: String) = putSetting("haptics", value)
-
-    /** "plain" (engineering sheet) or "cards" (playing deck). */
-    fun visualStyle(): String = settings().optString("visualStyle", "cards")
-
-    fun setVisualStyle(value: String) = putSetting("visualStyle", value)
 
     /** "pie", "line" or "bar" - the chart the Session report draws. */
     fun chartKind(): String = settings().optString("chart", "pie")

@@ -1,13 +1,11 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   Full-backup policy for devices older than Android 12 (API 24-30).
+
+   Same rule as data_extraction_rules.xml: the learner files stay on the phone.
+   The app's own .xlsx export is the supported way to move a record.
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <exclude domain="file" path="nfc-attendance/" />
+    <exclude domain="external" path="reports/" />
 </full-backup-content>

@@ -1,19 +1,23 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   Android 12+ (API 31) backup policy.
+
+   The app stores the only copy of the class list, the card UIDs and every session
+   in filesDir/nfc-attendance/. Settings tells the teacher that nothing is
+   uploaded, and that promise has to survive the operating system's own backup:
+   letting Google Drive hold the names of thirty children would break it silently.
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <exclude domain="file" path="nfc-attendance/" />
+        <!-- The generated .xlsx files keep the same names and UIDs, and they live in
+             getExternalFilesDir()/reports - a second door to the same room. -->
+        <exclude domain="external" path="reports/" />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <!-- A teacher moving to a new phone gets the app, not the records: the
+             records move through the app's own export, which she holds. -->
+        <exclude domain="file" path="nfc-attendance/" />
+        <exclude domain="external" path="reports/" />
     </device-transfer>
-    -->
 </data-extraction-rules>

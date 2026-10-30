@@ -5,10 +5,9 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.media.AudioManager
-import android.media.ToneGenerator
 import android.nfc.NfcAdapter
 import android.os.Build
+import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -36,6 +35,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -59,6 +59,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -69,10 +72,16 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import com.nezzar.nfcattendance.R
 import com.nezzar.nfcattendance.data.DocumentsExport
 import com.nezzar.nfcattendance.data.HapticStrength
+import com.nezzar.nfcattendance.data.ReadCue
 import com.nezzar.nfcattendance.nfc.NfcScanner
+import com.nezzar.nfcattendance.nfc.NfcState
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** Bottom-bar destinations, in the same order as [Screen]. */
@@ -97,52 +106,78 @@ fun AppRoot(state: AppState, activity: Activity) {
     // ONE reader, owned here, armed only for the tab that needs taps - two screens can
     // never fight over enableReaderMode, and switching tabs always disarms it.
     val scanner = remember(activity) { NfcScanner(activity) }
-    // The tap feedback: a short tone (no permission needed) and the window's own
-    // haptic feedback at the strength chosen in Settings.
+    // Bumped on every resume so the arming effect can re-register the reader after a
+    // trip to Settings: the radio may already be on by the time the app is back, and
+    // no other key would have changed while it was away.
+    var resumeTick by remember { mutableIntStateOf(0) }
+    // The tap feedback: a short rendered tone (no permission needed) and the
+    // window's own haptic feedback at the strength chosen in Settings.
     val haptics = LocalHapticFeedback.current
-    val tone = remember {
-        try {
-            ToneGenerator(AudioManager.STREAM_NOTIFICATION, 85)
-        } catch (t: Throwable) {
-            null
-        }
-    }
+    // No ToneGenerator here on purpose. Its notification stream is muted by silent
+    // mode - in a classroom that is exactly when the teacher needs it - and one
+    // beep cannot tell "present" from "already counted". ReadFeedback renders a
+    // distinct tone per verdict on the media stream instead.
+    val feedback = remember { ReadFeedback() }
     DisposableEffect(Unit) {
-        onDispose { tone?.release() }
+        onDispose { feedback.release() }
     }
     // Armed for the two pages that take taps: the Scan tab, and the register page
     // (which lives under the shelf now, over the tabs).
     // The card reader is armed for registration always, and for the Scan tab only while
     // NFC is the chosen reader - in QR mode the camera is the reader, not the antenna.
+    //
+    // The reader is off while the session is paused, not merely ignored: the antenna
+    // must not keep reading cards into an outcome called PAUSED that then vanishes.
     val tapping = state.overlay == Overlay.REGISTER ||
-        (state.screen == Screen.SCAN && state.scanMode == ReaderMode.NFC)
+        (state.screen == Screen.SCAN && state.scanMode == ReaderMode.NFC && !state.paused)
+    // The display stays on whenever a page is armed - even with the radio off: the
+    // teacher may be walking to the quick-settings tile with the page open, and it
+    // must not lock on the way there. Split from arming because arming now depends
+    // on the radio, and a lock screen is not a hardware problem.
     DisposableEffect(tapping, activity) {
-        if (tapping) {
+        if (tapping) activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose { activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+    }
+
+    // Arming is keyed on the radio too. A quick-settings toggle never pauses the
+    // activity, so nothing else would re-register the reader: without this key the
+    // app would stay deaf after the teacher switched NFC on, and a tap at the door
+    // would vanish exactly as before. Switching it off disarms instead of leaving a
+    // callback that can never fire.
+    val radioOn = state.nfcState == NfcState.ENABLED
+    DisposableEffect(tapping, radioOn, resumeTick, activity) {
+        if (tapping && radioOn) {
             scanner.start { bytes ->
-                val tapsBefore = state.session?.taps?.size ?: 0
-                val pendingBefore = state.registerState.pendingUid
                 if (state.overlay == Overlay.REGISTER) state.onRegisterTap(bytes) else state.onNfcTap(bytes)
-                val landed = (state.session?.taps?.size ?: 0) > tapsBefore ||
-                    (pendingBefore == null && state.registerState.pendingUid != null)
-                if (landed) {
-                    // The same flag that buzzes the phone swells the chosen card's glow.
-                    state.noteCardRead()
-                    if (state.scanSound) tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
-                    when (state.hapticStrength) {
-                        HapticStrength.OFF -> Unit
-                        HapticStrength.LIGHT ->
-                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        HapticStrength.NORMAL ->
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        HapticStrength.STRONG -> {
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        }
-                    }
-                }
             }
         }
         onDispose { scanner.stop() }
+    }
+
+    // Every read reports itself here, whichever reader and whatever the verdict:
+    // the sound and the buzz follow the ANSWER, not whether the count moved, so
+    // silence can never be mistaken for success at the door.
+    LaunchedEffect(state.cueSeq) {
+        val cue = state.lastCue ?: return@LaunchedEffect
+        if (state.scanSound) feedback.play(cue)
+        val presses = when (cue) {
+            ReadCue.RECORDED -> 1
+            ReadCue.LATE -> 2
+            ReadCue.DUPLICATE -> 2
+            ReadCue.UNKNOWN -> 3
+            ReadCue.REFUSED -> 1
+        }
+        if (state.hapticStrength != HapticStrength.OFF) {
+            repeat(presses) { index ->
+                if (index > 0) delay(90)
+                val type = if (state.hapticStrength == HapticStrength.LIGHT) {
+                    HapticFeedbackType.TextHandleMove
+                } else {
+                    HapticFeedbackType.LongPress
+                }
+                haptics.performHapticFeedback(type)
+            }
+        }
     }
 
     // The reader light has to be right the moment a page opens, and again when the
@@ -161,7 +196,22 @@ fun AppRoot(state: AppState, activity: Activity) {
             @Suppress("UnspecifiedRegisterReceiverFlag")
             activity.registerReceiver(receiver, filter)
         }
-        onDispose { activity.unregisterReceiver(receiver) }
+        // The broadcast is the fast path; a resume re-sample is the belt-and-braces
+        // one, for a ROM that drops it while the app is in the background.
+        val resume = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                state.useNfcState(scanner.state())
+                resumeTick += 1
+            }
+        }
+        // MainActivity is a ComponentActivity and therefore a LifecycleOwner; the
+        // cast keeps this correct if the shell is ever handed a bare Activity.
+        val owner = activity as? LifecycleOwner
+        owner?.lifecycle?.addObserver(resume)
+        onDispose {
+            activity.unregisterReceiver(receiver)
+            owner?.lifecycle?.removeObserver(resume)
+        }
     }
 
     // Back closes the open page. There is no drawer to close any more.
@@ -291,7 +341,7 @@ private fun ShellHeader(state: AppState, onSettings: () -> Unit, onGuide: () -> 
         Overlay.TUTORIAL -> "How to use"
         Overlay.STUDENT -> "Student"
         Overlay.ROSTER -> "Registered students"
-        Overlay.NEW_SECTION -> "New section"
+        Overlay.NEW_SECTION -> "New class"
         Overlay.SECTION -> "Edit class"
         Overlay.REGISTER -> "Register"
         Overlay.QR_CONFIRM -> "Confirm student"
@@ -324,9 +374,20 @@ private fun ShellHeader(state: AppState, onSettings: () -> Unit, onGuide: () -> 
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        if (overlay == null) {
+                        // The chip carries the class wherever the app goes: its mark,
+                        // then its name, both short enough to sit next to the tab title.
+                        state.selectedSection?.let { picked ->
                             Spacer(Modifier.width(10.dp))
-                            Pill(text = state.selectedSection?.name ?: "No section")
+                            ClassBadge(name = picked.name, selected = true, size = 26.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = picked.name,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.widthIn(max = 132.dp),
+                            )
                         }
                     }
                 }

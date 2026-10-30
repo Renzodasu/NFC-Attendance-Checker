@@ -3,8 +3,12 @@ package com.nezzar.nfcattendance.data
 import java.io.InputStream
 import java.util.zip.ZipInputStream
 
-/** A read workbook: sheet names in workbook order plus their rows of text. */
-class XlsxBook(
+/**
+ * A read workbook: sheet names in workbook order plus their rows of text.
+ * Returned by both readers - [XlsxReader] for .xlsx, [XlsReader] for .xls - so
+ * callers never care which file format the class list arrived in.
+ */
+class ReadBook(
     val sheetNames: List<String>,
     private val sheets: List<List<List<String>>>,
 ) {
@@ -32,7 +36,7 @@ object XlsxReader {
     const val MAX_COLUMNS = 64
 
     @Throws(IllegalArgumentException::class)
-    fun read(input: InputStream): XlsxBook {
+    fun read(input: InputStream): ReadBook {
         val parts = LinkedHashMap<String, String>()
         ZipInputStream(input).use { zip ->
             while (true) {
@@ -68,7 +72,7 @@ object XlsxReader {
         if (names.isEmpty()) {
             throw IllegalArgumentException("This workbook has no worksheets to read.")
         }
-        return XlsxBook(names, tables)
+        return ReadBook(names, tables)
     }
 
     /** Element order of <sheets><sheet name="Roster" r:id="rId1"/>... */

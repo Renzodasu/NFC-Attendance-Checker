@@ -38,12 +38,11 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.nezzar.nfcattendance.R
-import com.nezzar.nfcattendance.data.PlayingCards
 import com.nezzar.nfcattendance.data.Section
-import com.nezzar.nfcattendance.data.VisualStyle
 
 /**
  * Everything that MANAGES one class, on a page of its own: the card as the shelf
@@ -61,14 +60,19 @@ fun SectionScreen(state: AppState, modifier: Modifier = Modifier) {
     val section = state.selectedSection
     val listState = rememberLazyListState()
 
-    var name by remember { mutableStateOf(section?.name ?: "") }
-    var subject by remember { mutableStateOf(section?.subject ?: "") }
-    var suit by remember { mutableStateOf(section?.card?.let { PlayingCards.suit(it) } ?: "") }
-    var rank by remember { mutableStateOf(section?.card?.let { PlayingCards.rank(it) } ?: "") }
+    // Keyed on the section: a draft belongs to the class it was typed for, so
+    // opening this page for another class can never show the previous name.
+    var name by remember(section?.name) { mutableStateOf(section?.name ?: "") }
+    var subject by remember(section?.name) { mutableStateOf(section?.subject ?: "") }
     var justSaved by remember { mutableStateOf(false) }
 
+    // Which card holds the keyboard. Name is the fourth block and Subject the
+    // fifth, so the reveal has to follow the field the person is actually in -
+    // a fixed index one short is how the field ended up behind the keyboard.
+    var typingAt by remember { mutableStateOf<Int?>(null) }
+
     val save = {
-        state.saveSectionEdits(name, subject, suit, rank)
+        state.saveSectionEdits(name, subject)
         justSaved = state.sectionsError.isEmpty()
     }
     // The header holds the button, this page holds the draft, so the button is
@@ -80,9 +84,9 @@ fun SectionScreen(state: AppState, modifier: Modifier = Modifier) {
         onDispose { state.setHeaderAction(null, null) }
     }
 
-    // Name and Subject are the two cards worth typing on: keep them in front of
-    // the keyboard when it opens.
-    RevealTypingField(listState = listState, index = if (hasSection) 2 else null, active = hasSection)
+    // Name and Subject are the two cards worth typing on: keep whichever one has
+    // the keyboard in front of it.
+    RevealTypingField(listState = listState, index = typingAt, active = typingAt != null)
 
     LazyColumn(
         state = listState,
@@ -93,7 +97,7 @@ fun SectionScreen(state: AppState, modifier: Modifier = Modifier) {
         item(key = "title") {
             CollapsingTitle(
                 title = section?.name ?: "Section",
-                subtitle = "Its name, its subject and its face - then Save.",
+                subtitle = "Its name and its subject - then Save.",
                 listState = listState,
             )
         }
@@ -103,13 +107,25 @@ fun SectionScreen(state: AppState, modifier: Modifier = Modifier) {
                 EmptyState(
                     icon = R.drawable.ic_add,
                     title = "No section selected",
-                    body = "Swipe the shelf to a class first, then press Manage on its card.",
+                    body = "Pick a class on the list first, then press Edit class.",
                     actionLabel = "Back to the sections",
                     onAction = { state.closeOverlay() },
                 )
             }
         } else {
-            item(key = "face") { SectionFaceCard(state) }
+            item(key = "mark") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ClassBadge(name = section.name, selected = true, size = 56.dp)
+                    Spacer(Modifier.width(14.dp))
+                    Column {
+                        Text(
+                            text = "This is how the class shows on your list",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Note("Two letters taken from the name. There is nothing to pick, and nothing to remember.")
+                    }
+                }
+            }
 
             // The student list used to hang under the shelf. It is part of managing a
             // class, so it lives on the class's own page now.
@@ -142,36 +158,24 @@ fun SectionScreen(state: AppState, modifier: Modifier = Modifier) {
             }
 
             item(key = "name") {
-                NameCard(name) {
-                    name = it
-                    justSaved = false
-                }
+                NameCard(
+                    name = name,
+                    onName = {
+                        name = it
+                        justSaved = false
+                    },
+                    onFocus = { typingAt = if (it) 3 else null },
+                )
             }
             item(key = "subject") {
-                SubjectCard(subject) {
-                    subject = it
-                    justSaved = false
-                }
-            }
-
-            // The name and the subject come first: they are what a class is, while
-            // the face is decoration - and it only shows on the shelf in the Cards
-            // style, so it can only be picked there either.
-            if (state.visualStyle == VisualStyle.CARDS) {
-                item(key = "cardface") {
-                    FaceCard(
-                        suit = suit,
-                        rank = rank,
-                        onSuit = {
-                            suit = it
-                            justSaved = false
-                        },
-                        onRank = {
-                            rank = it
-                            justSaved = false
-                        },
-                    )
-                }
+                SubjectCard(
+                    subject = subject,
+                    onSubject = {
+                        subject = it
+                        justSaved = false
+                    },
+                    onFocus = { typingAt = if (it) 4 else null },
+                )
             }
 
             val error = state.sectionsError
@@ -201,43 +205,32 @@ fun SectionScreen(state: AppState, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun FaceCard(
-    suit: String,
-    rank: String,
-    onSuit: (String) -> Unit,
-    onRank: (String) -> Unit,
+private fun NameCard(
+    name: String,
+    onName: (String) -> Unit,
+    onFocus: (Boolean) -> Unit,
 ) {
-    BrandCard {
-        SectionLabel("Card face")
-        Spacer(Modifier.height(10.dp))
-        FacePicker(
-            suit = suit,
-            rank = rank,
-            onSuit = onSuit,
-            onRank = onRank,
-        )
-        Spacer(Modifier.height(8.dp))
-        Note("No two classes hold the same face, so a face already on the shelf is refused.")
-    }
-}
-
-@Composable
-private fun NameCard(name: String, onName: (String) -> Unit) {
     BrandCard {
         SectionLabel("Name")
         Spacer(Modifier.height(10.dp))
         OutlinedTextField(
             value = name,
             onValueChange = onName,
-            label = { Text("Section name (e.g. BSCE-4B)") },
+            label = { Text("Class name (e.g. Grade 3 - Rizal)") },
             singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { onFocus(it.isFocused) },
         )
     }
 }
 
 @Composable
-private fun SubjectCard(subject: String, onSubject: (String) -> Unit) {
+private fun SubjectCard(
+    subject: String,
+    onSubject: (String) -> Unit,
+    onFocus: (Boolean) -> Unit,
+) {
     BrandCard {
         SectionLabel("Subject")
         Spacer(Modifier.height(10.dp))
@@ -246,7 +239,9 @@ private fun SubjectCard(subject: String, onSubject: (String) -> Unit) {
             onValueChange = onSubject,
             label = { Text("Subject (e.g. Surveying)") },
             singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { onFocus(it.isFocused) },
         )
         Spacer(Modifier.height(8.dp))
         Note("It travels with the roster file and shows on the section card.")

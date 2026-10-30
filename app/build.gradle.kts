@@ -4,7 +4,8 @@ plugins {
 }
 
 // Single source of truth for the version shown in the APK file name and the manifest.
-val androidVersionName = "0.0.4"
+// 0.0.6: a friendly face - class plates instead of playing cards, and .xls import.
+val androidVersionName = "0.0.6"
 
 android {
     namespace = "com.nezzar.nfcattendance"
@@ -16,7 +17,7 @@ android {
         applicationId = "com.nezzar.nfcattendance"
         minSdk = 24
         targetSdk = 37
-        versionCode = 4
+        versionCode = 6
         versionName = androidVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

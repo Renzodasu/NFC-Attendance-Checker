@@ -1,13 +1,8 @@
 package com.nezzar.nfcattendance.ui
 
-import com.nezzar.nfcattendance.data.VisualStyle
-
-import com.nezzar.nfcattendance.data.PlayingCards
-
+import com.nezzar.nfcattendance.data.ClassMark
 import androidx.compose.ui.unit.sp
-
 import androidx.compose.ui.unit.Dp
-
 import androidx.compose.ui.text.font.FontWeight
 
 import androidx.compose.ui.text.font.FontFamily
@@ -334,6 +329,81 @@ fun Pill(text: String, accent: Boolean = false) {
             color = if (accent) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
         )
+    }
+}
+
+/**
+ * The class's own two-letter mark: a rounded tile carrying [ClassMark.monogram].
+ *
+ * This is the app's replacement for the playing-card face, and it is deliberately
+ * not unique - two classes may share "3R" without any warning, because a mark is
+ * read as a label, not as an identity. Identity is still the class NAME; the mark
+ * only gives the eye something to catch at a glance.
+ *
+ * Selected is the app's ONE live state: the tile is green and the letter is
+ * onPrimary. Unselected stays neutral, so amber remains free for late / unknown /
+ * NFC-off.
+ */
+@Composable
+fun ClassBadge(
+    name: String,
+    selected: Boolean = false,
+    size: Dp = 44.dp,
+) {
+    val shape = RoundedCornerShape(size * 0.31f)
+    Surface(
+        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
+        shape = shape,
+        modifier = Modifier.size(size),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = ClassMark.monogram(name),
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = (size.value * 0.38f).sp,
+                    lineHeight = (size.value * 0.42f).sp,
+                    letterSpacing = 0.sp,
+                ),
+                color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/**
+ * Mark + name, for the places the app has to say WHICH class it is working on:
+ * the header pill, the Scan band, the report header. The subject is a single
+ * grey line under the name, never a second heading.
+ */
+@Composable
+fun ClassIdentity(
+    name: String,
+    subject: String? = null,
+    selected: Boolean = true,
+    badgeSize: Dp = 40.dp,
+    nameStyle: TextStyle = MaterialTheme.typography.titleSmall,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        ClassBadge(name = name, selected = selected, size = badgeSize)
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f, fill = false)) {
+            Text(
+                text = name,
+                style = nameStyle,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (!subject.isNullOrBlank()) {
+                Text(
+                    text = subject,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
 }
 
