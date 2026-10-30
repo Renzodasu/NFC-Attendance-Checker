@@ -100,7 +100,11 @@ object Sf2Form {
                 inFemaleBlock = true
                 continue
             }
+            // The No. cell is a merge of A:B on this template, and a file re-saved by
+            // another program can keep the number in either half of that merge: the
+            // first girl on the real form has her "1" in column B. Read both.
             val number = (row.getOrNull(0) ?: "").trim()
+                .ifEmpty { (row.getOrNull(1) ?: "").trim() }
             if (number.isEmpty() || number.any { !it.isDigit() }) continue
             val rawName = nameOf(row) ?: continue
             if (rawName.isEmpty()) {

@@ -4,6 +4,18 @@ All notable changes to NFC Attendance Checker. This project follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and uses date-based
 versions in the form `0.0.N`.
 
+## [0.0.8] - 2026-10-30
+
+### Fixed
+
+- **An SF2 import no longer loses a learner.** The form merges columns A and B for
+  its *No.* column, and a copy re-saved by another program can keep a number in the
+  right half of that merge. The first girl on a real Grade 5 form had her `1` in
+  column B, so her row was skipped and the class arrived with 29 learners instead of
+  30 — silently, because the row looked unnumbered rather than broken. The importer
+  now reads the number from either half of the merged cell; the same form imports as
+  14 male and 16 female learners. A regression test pins it (`Sf2FormTest`).
+
 ## [0.0.7] - 2026-10-30
 
 ### Added

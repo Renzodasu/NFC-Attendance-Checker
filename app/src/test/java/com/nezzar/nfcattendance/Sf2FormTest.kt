@@ -69,6 +69,30 @@ class Sf2FormTest {
     }
 
     @Test
+    fun aNumberKeptInTheRightHalfOfTheMergedNoCellStillCounts() {
+        // The real form merges A:B for the No. column, and one re-saved copy keeps
+        // the first girl's "1" in column B. Dropping that row lost a learner.
+        val parsed = Sf2Form.parse(
+            form(
+                learnerRows = listOf(
+                    line(0 to "1", 2 to "Example, Chris B."),
+                    line(2 to "<=== MALE | TOTAL Per Day ===>"),
+                    line(1 to "1", 2 to "Sample, Ana P."),
+                    line(0 to "2", 2 to "Sample, Kaye P."),
+                ),
+            ),
+        )
+
+        assertEquals("", parsed.error)
+        assertEquals(
+            listOf("Example, Chris B.", "Sample, Ana P.", "Sample, Kaye P."),
+            parsed.students.map { it.name },
+        )
+        assertEquals(listOf("M", "F", "F"), parsed.students.map { it.sex })
+        assertTrue(parsed.skipped.isEmpty())
+    }
+
+    @Test
     fun detectsTheTemplateByItsSheetNameAndByItsShorthand() {
         assertEquals("school_form_2_ver2014.2.1.1", Sf2Form.detect(listOf("Sheet1", "school_form_2_ver2014.2.1.1")))
         assertEquals("SF2", Sf2Form.detect(listOf("SF2")))
