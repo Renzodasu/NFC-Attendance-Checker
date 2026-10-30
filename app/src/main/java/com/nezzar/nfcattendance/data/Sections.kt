@@ -84,7 +84,105 @@ object Sections {
     fun registeredName(section: Section?, uid: String): String? {
         val target = section ?: return null
         val canonical = Uid.normalize(uid)
+        // A blank UID is "no card yet": it must never match the first unbound row.
+        if (canonical.isEmpty()) return null
         return target.students.firstOrNull { Uid.normalize(it.uid) == canonical }?.name
+    }
+
+    /** The learners still waiting for a card, in roster order. */
+    fun unbound(section: Section?): List<Student> =
+        section?.students?.filter { it.uid.isBlank() } ?: emptyList()
+
+    /**
+     * Binds one tapped card to a learner who arrived without one - the state a
+     * class read out of a school form starts in. The learner keeps their name and
+     * sex; only the UID is filled in, so the roster that was read from the form
+     * stays recognisably the form's roster.
+     */
+    fun bindCard(
+        sections: List<Section>,
+        sectionName: String,
+        studentName: String,
+        uid: String,
+        now: Long = System.currentTimeMillis(),
+    ): Edit {
+        val target = find(sections, sectionName) ?: return Edit(sections, error = "Select a section first.")
+        val canonical = Uid.normalize(uid)
+        if (!Uid.isValid(canonical)) {
+            return Edit(sections, error = "That card did not read as a whole UID.")
+        }
+        for (section in sections) {
+            val holder = section.students.firstOrNull { Uid.normalize(it.uid) == canonical } ?: continue
+            return Edit(
+                sections,
+                error = "That card is already registered to " + holder.name + " in " + section.name + ".",
+            )
+        }
+        val wanted = studentName.trim()
+        if (wanted.isEmpty()) return Edit(sections, error = "Choose who this card belongs to.")
+        val learner = target.students.firstOrNull {
+            it.uid.isBlank() && it.name.equals(wanted, ignoreCase = true)
+        } ?: return Edit(sections, error = "No learner called " + wanted + " is waiting for a card.")
+        if (learner.name.isBlank()) return Edit(sections, error = "That learner has no name.")
+        val students = target.students.map {
+            if (it.uid.isBlank() && it.name.equals(wanted, ignoreCase = true)) it.copy(uid = canonical) else it
+        }
+        val updated = sections.map {
+            if (it.name == target.name) target.copy(students = students, updatedAt = now) else it
+        }
+        return Edit(updated, message = "Bound " + canonical + " to " + learner.name + ".")
+    }
+
+    /**
+     * A class read out of a school form: its learners arrive with a name and a
+     * sex but no card, so they start in the "no card yet" state. Re-importing the
+     * same form into the same class only adds the names it does not already have,
+     * and never touches a card that is already bound.
+     */
+    fun importForm(
+        sections: List<Section>,
+        rawName: String,
+        students: List<Student>,
+        header: Sf2Header?,
+        now: Long = System.currentTimeMillis(),
+    ): Edit {
+        val name = rawName.trim()
+        if (name.isEmpty()) return Edit(sections, error = "A class name cannot be blank.")
+        if (students.isEmpty()) return Edit(sections, error = "That school form has no learners in it.")
+        val target = find(sections, name)
+        if (target == null) {
+            val created = Section(name, students.map { it.copy(uid = "") }, now, "", header)
+            return Edit(
+                sections + created,
+                message = "Imported " + created.students.size + " learner(s) into " + name +
+                    " - no cards bound yet.",
+            )
+        }
+        val known = target.students.map { it.name.trim().uppercase() }.toSet()
+        val added = students
+            .filter { it.name.trim().uppercase() !in known }
+            .map { it.copy(uid = "") }
+        val takenHeader = target.sf2 ?: header
+        if (added.isEmpty() && takenHeader == target.sf2) {
+            return Edit(sections, message = name + " already has every learner from that form.")
+        }
+        val updated = sections.map {
+            if (it.name == target.name) {
+                target.copy(
+                    students = target.students + added,
+                    updatedAt = if (added.isEmpty()) target.updatedAt else now,
+                    sf2 = takenHeader,
+                )
+            } else {
+                it
+            }
+        }
+        val message = if (added.isEmpty()) {
+            "Took the school form details into " + name + "."
+        } else {
+            "Added " + added.size + " learner(s) to " + name + " - no cards bound yet."
+        }
+        return Edit(updated, message = message)
     }
 
     /**
@@ -102,6 +200,7 @@ object Sections {
         val name = rawName.trim()
         if (name.isEmpty()) return Edit(sections, error = "Enter the student's name before saving.")
         val canonical = Uid.normalize(uid)
+        if (!Uid.isValid(canonical)) return Edit(sections, error = "That card did not read as a whole UID.")
         val existing = target.students.firstOrNull { Uid.normalize(it.uid) == canonical }
         val students = if (existing == null) {
             target.students + Student(name, canonical)
@@ -131,6 +230,7 @@ object Sections {
         val name = rawName.trim()
         if (name.isEmpty()) return Edit(sections, error = "A student name cannot be blank.")
         val canonical = Uid.normalize(uid)
+        if (canonical.isEmpty()) return Edit(sections, error = "That learner has no card yet, so there is nothing to rename.")
         var found = false
         val students = target.students.map {
             if (Uid.normalize(it.uid) == canonical) {
@@ -156,6 +256,9 @@ object Sections {
     ): Edit {
         val target = find(sections, sectionName) ?: return Edit(sections, error = "Select a section first.")
         val canonical = Uid.normalize(uid)
+        if (canonical.isEmpty()) {
+            return Edit(sections, error = "That learner has no card yet, so there is no card to remove.")
+        }
         val students = target.students.filter { Uid.normalize(it.uid) != canonical }
         if (students.size == target.students.size) {
             return Edit(sections, error = "No student with UID " + canonical + " in " + target.name + ".")

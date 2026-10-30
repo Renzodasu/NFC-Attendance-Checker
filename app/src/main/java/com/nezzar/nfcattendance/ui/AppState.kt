@@ -23,6 +23,8 @@ import com.nezzar.nfcattendance.data.ResolvedAttendance
 import com.nezzar.nfcattendance.data.RosterImporter
 import com.nezzar.nfcattendance.data.Section
 import com.nezzar.nfcattendance.data.Sections
+import com.nezzar.nfcattendance.data.Sf2Form
+import com.nezzar.nfcattendance.data.Sf2Report
 import com.nezzar.nfcattendance.data.Sheet
 import com.nezzar.nfcattendance.data.startStatusText
 import com.nezzar.nfcattendance.data.Store
@@ -89,7 +91,7 @@ data class PendingExport(
     val fileName: String,
     val bytes: ByteArray,
 ) {
-    enum class Kind { ROSTER, REPORT }
+    enum class Kind { ROSTER, REPORT, SF2 }
 }
 
 /** The most recent card read on the Scan tab, for the line that never scrolls away. */
@@ -101,6 +103,12 @@ data class LastRead(
     /** True when the read was refused because this student is already recorded. */
     val duplicate: Boolean = false,
 )
+
+/** What a picked workbook turned out to be: a class list, or a school form. */
+private sealed interface Picked {
+    data class Roster(val parsed: RosterImporter.Parsed) : Picked
+    data class Sf2(val parsed: Sf2Form.Parsed) : Picked
+}
 
 /**
  * The app's whole state. It is a ViewModel now, which is what makes it outlive a
@@ -189,6 +197,9 @@ class AppState(application: Application) : AndroidViewModel(application) {
     /** True while a picked file is being read, so the picker cannot be started twice. */
     var importBusy by mutableStateOf(false)
 
+    /** The school form waiting for confirmation, when the picked file was one. */
+    var importedSf2 by mutableStateOf<Sf2Form.Parsed?>(null)
+
     // Register mode ----------------------------------------------------------
     var registerState by mutableStateOf(RegisterState())
 
@@ -235,6 +246,21 @@ class AppState(application: Application) : AndroidViewModel(application) {
     var reportPath by mutableStateOf<String?>(null)
     var reportError by mutableStateOf<String?>(null)
     var reportUri by mutableStateOf<Uri?>(null)
+
+    // The SF2 the school asks for ---------------------------------------------
+    var sf2Path by mutableStateOf<String?>(null)
+    var sf2Error by mutableStateOf<String?>(null)
+    var sf2Uri by mutableStateOf<Uri?>(null)
+
+    /** year*100+month of the SF2 the teacher wants; 0 means "the newest one". */
+    var sf2MonthKey by mutableStateOf(0)
+
+    /**
+     * Every session already written to disk, newest first. Reloaded when a
+     * session closes so the month list and the sheet see what the file holds,
+     * not just what this launch happened to record.
+     */
+    var storedSessions by mutableStateOf<List<AttendanceSession>>(emptyList())
 
     // The chosen card's live glow ---------------------------------------------
     /** The instant a card actually landed, so the chosen card can swell on the beat. */
@@ -317,6 +343,8 @@ class AppState(application: Application) : AndroidViewModel(application) {
             statusText = "Session " + live.session.sessionId + " restored with " +
                 live.session.taps.size + " tap(s) already recorded."
         }
+        storedSessions = store.sessions()
+        sf2MonthKey = sf2Months.firstOrNull()?.let { it.year * 100 + it.month } ?: 0
     }
 
     /** Try the class list again - a failed read should be recoverable, not fatal. */
@@ -357,6 +385,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
     /** How the picked file will merge, recomputed whenever the name field or the sections change. */
     val importPlan: RosterImporter.Plan?
         get() {
+            if (importedSf2 != null) return null
             val parsed = importedFile ?: return null
             return RosterImporter.plan(parsed, sections, importTargetName)
         }
@@ -565,6 +594,60 @@ class AppState(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    /** Every session of one class, on disk and in memory, newest first. */
+    private fun allSessions(sectionName: String): List<AttendanceSession> {
+        val live = session
+        val extra = if (live != null && live.sectionName.equals(sectionName, ignoreCase = true)) {
+            listOf(live)
+        } else {
+            emptyList()
+        }
+        return (storedSessions + extra)
+            .distinctBy { it.sessionId }
+            .filter { it.sectionName.equals(sectionName, ignoreCase = true) }
+            .sortedByDescending { it.startedAtMillis }
+    }
+
+    /** The months this class has a session in, newest first - the SF2 picker. */
+    val sf2Months: List<Sf2Report.Month>
+        get() = Sf2Report.months(allSessions(selectedName), selectedName)
+
+    fun chooseSf2Month(key: Int) {
+        sf2MonthKey = key
+        sf2Error = null
+    }
+
+    /**
+     * Writes the month's SF2 for the chosen class. Every recorded session in that
+     * month becomes one day column, so the sheet the school asks for is built
+     * from the taps that actually happened rather than retyped by hand.
+     */
+    fun exportSf2() {
+        val section = selectedSection
+        if (section == null) {
+            sf2Error = "Choose a class first."
+            return
+        }
+        if (section.students.isEmpty()) {
+            sf2Error = section.name + " has no learners yet."
+            return
+        }
+        val months = sf2Months
+        if (months.isEmpty()) {
+            sf2Error = "No session recorded for " + section.name + " yet."
+            return
+        }
+        val month = months.firstOrNull { it.year * 100 + it.month == sf2MonthKey } ?: months.first()
+        sf2Uri = null
+        sf2Path = null
+        sf2Error = null
+        deliver(
+            PendingExport.Kind.SF2,
+            "SF2-" + safeFileName(section.name) + "-" + month.filePart + ".xlsx",
+            bytes(listOf(Sf2Report.build(section, allSessions(section.name), month.year, month.month))),
+        )
+    }
+
     private fun deliver(kind: PendingExport.Kind, fileName: String, body: ByteArray) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             try {
@@ -626,6 +709,11 @@ class AppState(application: Application) : AndroidViewModel(application) {
                 reportUri = uri
                 reportError = note
             }
+            PendingExport.Kind.SF2 -> {
+                sf2Path = path
+                sf2Uri = uri
+                sf2Error = note
+            }
         }
     }
 
@@ -644,6 +732,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
             when {
                 rosterUri == target -> rosterError = "No app on this phone can share the file."
                 reportUri == target -> reportError = "No app on this phone can share the file."
+                sf2Uri == target -> sf2Error = "No app on this phone can share the file."
             }
         }
     }
@@ -664,19 +753,33 @@ class AppState(application: Application) : AndroidViewModel(application) {
     fun stageImport(uri: Uri) {
         importError = ""
         importedFile = null
+        importedSf2 = null
         importBusy = true
         imports.launch {
             try {
-                val parsed = readImport(uri)
-                importSourceName = displayName(uri)
-                if (parsed.error.isNotEmpty()) {
-                    importError = parsed.error
-                } else {
-                    importedFile = parsed
-                    importTargetName = parsed.sectionName.ifBlank { "Imported section" }
+                when (val picked = readImport(uri)) {
+                    is Picked.Roster -> {
+                        importSourceName = displayName(uri)
+                        if (picked.parsed.error.isNotEmpty()) {
+                            importError = picked.parsed.error
+                        } else {
+                            importedFile = picked.parsed
+                            importTargetName = picked.parsed.sectionName.ifBlank { "Imported section" }
+                        }
+                    }
+                    is Picked.Sf2 -> {
+                        importSourceName = displayName(uri)
+                        if (picked.parsed.error.isNotEmpty()) {
+                            importError = picked.parsed.error
+                        } else {
+                            importedSf2 = picked.parsed
+                            importTargetName = picked.parsed.className
+                        }
+                    }
                 }
             } catch (t: Throwable) {
                 importedFile = null
+                importedSf2 = null
                 importError = friendlyImportError(t)
             } finally {
                 importBusy = false
@@ -689,7 +792,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
      * pulled, then the bytes are read through a hard cap: a picked video must fail
      * as "too big", never as an out-of-memory crash.
      */
-    private fun readImport(uri: Uri): RosterImporter.Parsed {
+    private fun readImport(uri: Uri): Picked {
         val resolver = appContext.contentResolver
         val declared = resolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
         if (declared > XlsReader.MAX_BYTES) throw tooBig(declared)
@@ -700,12 +803,15 @@ class AppState(application: Application) : AndroidViewModel(application) {
         } else {
             XlsxReader.read(bytes.inputStream())
         }
-        val sheet = book.sheet(RosterImporter.SHEET_ROSTER)
-            ?: throw IllegalArgumentException(
-                "That workbook has no sheet named Roster. Sheets found: " +
-                    book.sheetNames.joinToString(", ") + "."
-            )
-        return RosterImporter.parse(sheet)
+        // A class list first: this is what the app itself exports. A school form
+        // second, because that is the file a teacher actually has on hand.
+        book.sheet(RosterImporter.SHEET_ROSTER)?.let { return Picked.Roster(RosterImporter.parse(it)) }
+        val formSheet = Sf2Form.detect(book.sheetNames)?.let { book.sheet(it) }
+        if (formSheet != null) return Picked.Sf2(Sf2Form.parse(formSheet))
+        throw IllegalArgumentException(
+            "That workbook is neither a class list (a Roster sheet) nor a school form (SF2). " +
+                "Sheets found: " + book.sheetNames.joinToString(", ") + "."
+        )
     }
 
     private fun readCapped(resolver: android.content.ContentResolver, uri: Uri): ByteArray {
@@ -764,8 +870,36 @@ class AppState(application: Application) : AndroidViewModel(application) {
         sectionsMessage = summary
     }
 
+    /**
+     * Takes the school form that was picked and turns it into a class: names and
+     * sex in, cards still unbound. Re-picking the same form only adds learners the
+     * class does not already have, so a second import cannot duplicate a roster.
+     */
+    fun confirmSf2Import() {
+        val parsed = importedSf2 ?: return
+        if (sectionsBroken != null) {
+            importError = "The class list cannot be read, so importing would overwrite it. Fix that first."
+            return
+        }
+        val name = importTargetName.trim().ifBlank { parsed.className }
+        val edit = Sections.importForm(sections, name, parsed.students, parsed.header())
+        if (edit.error.isNotEmpty()) {
+            importError = edit.error
+            return
+        }
+        sections = edit.sections
+        store.saveSections(sections)
+        importedSf2 = null
+        importSourceName = ""
+        importedFile = null
+        importError = ""
+        Sections.find(sections, name)?.let { selectSection(it.name) }
+        sectionsMessage = edit.message
+    }
+
     fun cancelImport() {
         importedFile = null
+        importedSf2 = null
         importSourceName = ""
         importTargetName = ""
         importError = ""
@@ -832,6 +966,31 @@ class AppState(application: Application) : AndroidViewModel(application) {
             store.saveSections(sections)
             sectionsMessage = outcome.first.message
         }
+    }
+
+    /**
+     * Binds the card waiting in Register to a learner who arrived without one -
+     * the state every class read out of a school form starts in. Register mode is
+     * re-armed afterwards, because the teacher is at a door tapping cards one
+     * after another.
+     */
+    fun bindCard(studentName: String) {
+        val pending = registerState.pendingUid ?: return
+        val edit = Sections.bindCard(sections, selectedName, studentName, pending)
+        if (edit.error.isNotEmpty()) {
+            registerState = registerState.copy(message = edit.error)
+            return
+        }
+        sections = edit.sections
+        store.saveSections(sections)
+        sectionsMessage = edit.message
+        registerState = RegisterFlow.arm(
+            registerState.copy(
+                savedCount = registerState.savedCount + 1,
+                lastSaved = studentName.trim() + "  " + pending,
+            ),
+            selectedSection,
+        ).copy(message = edit.message)
     }
 
     // ---------------------------------------------------------------------- scan
@@ -1065,7 +1224,12 @@ class AppState(application: Application) : AndroidViewModel(application) {
         val current = session ?: return
         val liveNow = running
         val pausedNow = paused
-        io.launch { store.saveSession(current, live = liveNow, paused = pausedNow) }
+        io.launch {
+            store.saveSession(current, live = liveNow, paused = pausedNow)
+            // A session that just closed is now history: reload the month list and
+            // the sheet source so both see the file, not only this launch's memory.
+            if (!liveNow) storedSessions = store.sessions()
+        }
     }
 
     fun resolved(): ResolvedAttendance? {

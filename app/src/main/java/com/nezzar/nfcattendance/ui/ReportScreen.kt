@@ -1,6 +1,7 @@
 package com.nezzar.nfcattendance.ui
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,17 +16,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.nezzar.nfcattendance.R
 import com.nezzar.nfcattendance.data.ReportBuilder
+import com.nezzar.nfcattendance.data.Sf2Report
 
 @Composable
 fun ReportScreen(state: AppState) {
@@ -57,6 +61,9 @@ fun ReportScreen(state: AppState) {
                     onAction = { state.screen = Screen.SCAN },
                 )
             }
+            // The school form is a month, not a session: it is offered here too, so
+            // a class with history can produce its SF2 after any launch.
+            item(key = "sf2") { Sf2Item(state) }
         } else {
             // The report opens on the class, not on a number: whose session this is has
             // to be readable before the tiles are read.
@@ -168,6 +175,10 @@ fun ReportScreen(state: AppState) {
                 }
             }
 
+            // The school form lives with the session export: both are sheets for the
+            // same teacher, and neither is hidden below the attendance lists.
+            item(key = "sf2") { Sf2Item(state) }
+
             // A late arrival is counted, and counted as late: its own list, with the
             // minute it was read.
             if (resolved.late.isNotEmpty()) {
@@ -258,6 +269,67 @@ fun ReportScreen(state: AppState) {
                 }
             }
 
+        }
+    }
+}
+
+/**
+ * The month's SF2, offered whenever a class is chosen. It sits beside the session
+ * export because both are sheets the same teacher hands in, and it stays reachable
+ * after the app is restarted - the sessions are on disk, not only in memory.
+ */
+@Composable
+private fun Sf2Item(state: AppState) {
+    val section = state.selectedSection
+    if (section != null) {
+        Sf2Card(state, section.name, state.sf2Months)
+    }
+}
+
+@Composable
+private fun Sf2Card(state: AppState, sectionName: String, months: List<Sf2Report.Month>) {
+    val chosen = months.firstOrNull { it.year * 100 + it.month == state.sf2MonthKey } ?: months.firstOrNull()
+    BrandCard {
+        SectionLabel("SF2 school form")
+        Spacer(Modifier.height(10.dp))
+        Note(
+            "One sheet per month, built from this class's sessions: blank is present, " +
+                "x absent, L late, N no card yet."
+        )
+        Spacer(Modifier.height(10.dp))
+        if (months.isEmpty()) {
+            Note("No session recorded for " + sectionName + " yet.")
+        } else {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+            ) {
+                for (month in months) {
+                    FilterChip(
+                        selected = month == chosen,
+                        onClick = { state.chooseSf2Month(month.year * 100 + month.month) },
+                        label = { Text(month.label) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = { state.exportSf2() },
+                modifier = Modifier.fillMaxWidth().height(54.dp),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_export),
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Export SF2 - " + (chosen?.label ?: "the month"))
+            }
+            ExportResult(
+                path = state.sf2Path,
+                note = state.sf2Error,
+                onShare = state.sf2Uri?.let { uri -> { state.shareFile(uri) } },
+            )
         }
     }
 }

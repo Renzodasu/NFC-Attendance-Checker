@@ -4,6 +4,61 @@ All notable changes to NFC Attendance Checker. This project follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and uses date-based
 versions in the form `0.0.N`.
 
+## [0.0.7] - 2026-10-30
+
+### Added
+
+- **A DepEd SF2 school form imports as a class.** The importer now recognises a
+  form's own sheet (`school_form_2...`, or `SF2`), reads the header it prints
+  (School ID, Name of School, School Year, Grade Level, Section, Report for the
+  Month of) and the learner rows in the form's two sex blocks. The learners arrive
+  with their **names** and **M/F**, with **no cards bound**, and the class keeps the
+  form's header so the export can print the same school again.
+- **Learners are matched the way the form is written.** A row named twice is
+  reported, not added twice; a numbered row with no name is reported by row number;
+  a class name is suggested as `Grade 5 - NARRA` and can be edited before
+  importing. Importing the same form again adds only the names the class does not
+  already have.
+- **Cards are bound later, on Register.** When a class came from a school form and
+  a card is read, the panel lists the learners who are **waiting for a card**
+  ("This card belongs to"): tap the name, and the card is bound to that learner. A
+  card already registered to someone in any class is refused by name.
+- **The month prints back as SF2.** The Report tab gained a school-form card with a
+  month picker over the months that hold a session. It writes the official layout:
+  title and subtitle, the school fields, one column per **school day** (Mon-Fri),
+  separate **MALE** and **FEMALE** blocks, each learner's day marks, per-day totals,
+  ABSENT and PRESENT columns, REMARKS, enrolment M/F/total, days of classes,
+  average daily attendance and percentage. **Blank is present, x is absent, L is
+  late, - is no session that day, N is no card yet.**
+- **The writer keeps the form's shape.** `XlsxWriter` gained column widths, row
+  heights, merged cells and eight cell styles (title, bold, boxed, boxed bold,
+  boxed centred, footnote), so an exported form looks like a form instead of a
+  plain grid of text.
+- **Session history is readable.** `Store.sessions()` returns every stored
+  session, so a month can be built after the session that recorded it has ended.
+- **A styled-sheet test** proves widths, merges and a boxed blank cell survive the
+  writer, and that the result still opens in the app's own reader.
+
+### Changed
+
+- **A student can exist before their card does.** `Student.uid` may now be blank;
+  such a learner is "no card yet", is listed for binding, is counted as neither
+  present nor absent on the form, and can never be matched by a stray blank UID.
+  Sessions keep the roster they were started with, so an old session is unchanged.
+- **Storage schema 4.** Sections carry `sex` per student and an optional `sf2`
+  header object. Old files load with the new fields empty, and a legacy `card`
+  key is still ignored rather than rejected.
+- **Register refuses a blank card.** Registering a name without a whole UID is now
+  an error ("That card did not read as a whole UID.") instead of writing a row no
+  tap can ever match.
+
+### Fixed
+
+- **The printed form fits the page.** Labels moved out of the five-character
+  *No.* column so the school fields are no longer cut off, the NAME heading is
+  short enough to read, and every worksheet now carries a landscape fit-to-page
+  setup, so a month prints on one page instead of spilling after day 15.
+
 ## [0.0.6] - 2026-10-30
 
 ### Added

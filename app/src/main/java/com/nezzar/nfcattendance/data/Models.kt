@@ -1,12 +1,32 @@
 package com.nezzar.nfcattendance.data
 
 /**
- * The roster keys on Name + UID only. There is no student number anywhere in
- * the model, the storage format or the reports.
+ * The roster keys on Name + UID. There is no student number anywhere in the
+ * model, the storage format or the reports.
+ *
+ * A blank [uid] is a real state, not a damaged row: a class read out of a school
+ * form arrives with its learners' names but with no card bound yet. Such a learner
+ * is simply "no card yet" until one is tapped against this phone.
+ * [sex] is "M" or "F" when the source said so; "" means unknown, and nothing in
+ * this app ever guesses it.
  */
 data class Student(
     val name: String,
     val uid: String,
+    val sex: String = "",
+)
+
+/**
+ * What a class knows about its school form, because a DepEd SF2 export has to
+ * print it. Kept beside the roster rather than derived from it: only the form
+ * itself carries a school ID, a school year and the form's own section label.
+ */
+data class Sf2Header(
+    val schoolId: String = "",
+    val schoolName: String = "",
+    val schoolYear: String = "",
+    val gradeLevel: String = "",
+    val sectionLabel: String = "",
 )
 
 /**
@@ -26,6 +46,12 @@ data class Section(
      * this section: it travels with the roster file and shows on the class plate.
      */
     val subject: String = "",
+    /**
+     * Set when this class was read out of a school form. Null for a class made by
+     * hand or imported from a roster, where the export fills what it can and leaves
+     * the rest blank rather than inventing a school name.
+     */
+    val sf2: Sf2Header? = null,
 )
 
 data class Tap(

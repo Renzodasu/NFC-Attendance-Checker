@@ -9,13 +9,13 @@ An offline Android app for taking class attendance by tapping student ID cards.
 
 Built for a **class beadle**: one roster per class, tap each card once, then export the session as an Excel workbook. The app ships as **Presencia NFC**; the repository keeps its original name.
 
-**No server. No network permission. No student numbers** — a student is a name and a card UID, nothing else.
+**No server. No network permission. No student numbers** — a student is a name and a card UID, plus the M/F a school form itself prints, nothing else.
 
 ## ✨ What it does
 
 - **🗂️ Classes** — one plate per class: the **name** at reading size, its **subject**, its roster count, and a **two-letter mark derived from the name** (`Grade 3 - Rizal` reads `3R`). Nothing has to be picked or memorised, and the chosen class is the only one with a green edge. The magnifier beside *New class* searches by **class name or subject**.
 
-- **🪪 Register** — tap an ID card, type the name, and save. A card already on the roster **updates its name** instead of adding a second row.
+- **🪪 Register** — tap an ID card, type the name, and save. A card already on the roster **updates its name** instead of adding a second row. A class read from a school form arrives with names but **no cards**; the same card panel lists **This card belongs to** so a tapped card can be bound to one of those learners.
 
 - **📡 Scan** — tap each card once per session. A repeat read of the same student is **refused**, naming the time they were first recorded. A read more than **15 minutes** after the session starts is still counted, but marked **late**. The threshold can be set to **10/15/20/30 minutes**. The session can also be paused and left open for late arrivals, and the last card read stays on screen with an **Undo** beside it.
   - **Every answer has a sound**, because at a door the teacher is looking at the student, not the screen: a clean tick for on time, a two-note rise for late, a low double knock for a card already counted, a buzz for a card that is not on the roster, and one long tone when there is nothing to record against. The tones are generated on the phone, play in silent mode, and can be switched off in Settings.
@@ -27,7 +27,9 @@ Built for a **class beadle**: one roster per class, tap each card once, then exp
 
 - **📋 Report** — **absent** first, then **late**, **present**, and **unmatched** cards. Every attendance row carries the **date and time** of the read.
 
-- **📊 Export / Import** — write the report or roster to `.xlsx` in the shared **`Documents/Presencia`** folder, or import a roster exported from another phone. Rows merge by **card UID**, and the **subject travels with the file**. Import reads modern `.xlsx` **and legacy `.xls`** files that carry the app's own *Roster* sheet, so a roster saved from an old copy of Excel still opens.
+- **🏫 School form (SF2)** — import a DepEd SF2 form as a class (names and M/F, no cards), and print a class's month back as the same form from the Report tab: one column per school day, male and female blocks, per-learner ABSENT/PRESENT, remarks, enrolment and percentage. **Blank** is present, **x** absent, **L** late, **-** no session that day, **N** no card yet.
+
+- **📊 Export / Import** — write the report or roster to `.xlsx` in the shared **`Documents/Presencia`** folder, or import a class from a file. Rows merge by **card UID**, and the **subject travels with the file**. Import reads modern `.xlsx` **and legacy `.xls`** files that carry the app's own *Roster* sheet, and it also reads a **DepEd SF2 school form** — see above.
 
 ## Class plates
 
@@ -53,13 +55,17 @@ with the deck: there is one look, and it is the same on every screen.
 
 ## Screens
 
-| New section | Register |
+| New class | Register |
 | --- | --- |
 | ![New class: name it, write its subject, or import a roster](docs/screenshots/new-section.png) | ![Register: tap an ID card, type the name, save](docs/screenshots/register.png) |
 
 | Scan | Report |
 | --- | --- |
-| ![Scan: start a session and tap each ID once](docs/screenshots/scan.png) | ![Report: the absent-first result, ready to export](docs/screenshots/report.png) |
+| ![Scan: start a session and tap each ID once](docs/screenshots/scan.png) | ![Report: the absent-first result, and the school-form card](docs/screenshots/report.png) |
+
+| The month, printed as SF2 |
+| --- |
+| ![The exported SF2: one column per school day, male and female blocks, ABSENT and PRESENT totals](docs/screenshots/sf2-form.png) |
 
 Also included: a registered-students page for the full roster with per-student
 standing, a full-screen student editor with the student's own **QR code**,

@@ -43,6 +43,7 @@ import com.nezzar.nfcattendance.R
 import com.nezzar.nfcattendance.data.DocumentsExport
 import com.nezzar.nfcattendance.data.ReportBuilder
 import com.nezzar.nfcattendance.data.RosterImporter
+import com.nezzar.nfcattendance.data.Sf2Form
 
 /**
  * Everything that ADDS a section lives on this page, off the shelf: the class name,
@@ -154,11 +155,11 @@ fun NewSectionScreen(state: AppState, modifier: Modifier = Modifier) {
                     )
                 }
                 Spacer(Modifier.height(8.dp))
-                // A DepEd SF2 school form is NOT this format: importing one fails on the
-                // missing Name column. Say what actually works, so nobody promises a
-                // teacher her school form will open.
-                Note("Cards are matched by UID, and the subject in the file comes with them. " +
-                    "The file needs the app's own Roster sheet - a Presencia export shows the layout.")
+                Note(
+                    "Two kinds of file work: a roster another phone exported, and a DepEd SF2 " +
+                        "school form. A form brings its learners' names with no cards bound - tap " +
+                        "each card on Register to bind it."
+                )
                 if (state.importError.isNotEmpty()) {
                     Spacer(Modifier.height(8.dp))
                     Text(
@@ -174,6 +175,10 @@ fun NewSectionScreen(state: AppState, modifier: Modifier = Modifier) {
         val parsed = state.importedFile
         if (plan != null && parsed != null) {
             item(key = "preview") { ImportPreview(state, plan, parsed) }
+        }
+        val form = state.importedSf2
+        if (form != null) {
+            item(key = "form") { Sf2Preview(state, form) }
         }
 
     }
@@ -196,6 +201,92 @@ private fun IfNameIsFree(state: AppState, name: String, content: @Composable () 
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.error,
         )
+    }
+}
+
+@Composable
+private fun Sf2Preview(state: AppState, parsed: Sf2Form.Parsed) {
+    val appear = remember { MutableTransitionState(false).apply { targetState = true } }
+    AnimatedVisibility(
+        visibleState = appear,
+        enter = expandVertically(
+            animationSpec = spring(
+                dampingRatio = 0.75f,
+                stiffness = Spring.StiffnessMediumLow,
+            ),
+            expandFrom = Alignment.Top,
+        ) + fadeIn(tween(200)),
+    ) {
+        BrandCard {
+            SectionLabel("School form preview")
+            Spacer(Modifier.height(10.dp))
+            KeyValueRow("File", state.importSourceName)
+            KeyValueRow("School", parsed.schoolName.ifBlank { "(not named in the file)" })
+            KeyValueRow("School ID", parsed.schoolId.ifBlank { "(none)" })
+            KeyValueRow("School year", parsed.schoolYear.ifBlank { "(none)" })
+            KeyValueRow("Grade level", parsed.gradeLevel.ifBlank { "(none)" })
+            KeyValueRow("Section in the file", parsed.sectionLabel.ifBlank { "(none)" })
+            KeyValueRow("Month", parsed.month.ifBlank { "(none)" })
+            val male = parsed.students.count { it.sex == "M" }
+            val female = parsed.students.count { it.sex == "F" }
+            val unknown = parsed.students.size - male - female
+            KeyValueRow(
+                label = "Learners",
+                value = parsed.students.size.toString() + "  ·  M " + male + "  ·  F " + female +
+                    (if (unknown > 0) "  ·  sex not recorded " + unknown else "") +
+                    (if (parsed.skipped.isNotEmpty()) "  ·  skipped " + parsed.skipped.size else ""),
+            )
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = state.importTargetName,
+                onValueChange = { state.importSectionNameChanged(it) },
+                label = { Text("Class name to import into") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(10.dp))
+            val target = state.sections.firstOrNull {
+                it.name.equals(state.importTargetName.trim(), ignoreCase = true)
+            }
+            Text(
+                text = if (target == null) {
+                    "Create " + state.importTargetName.trim() + " from these learners."
+                } else {
+                    "Merge into " + target.name + " - only names it does not already have are added."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.height(4.dp))
+            Note("Their cards are not bound yet. Tap a card on Register and choose the learner it belongs to.")
+            if (parsed.skipped.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                for (skip in parsed.skipped.take(6)) {
+                    Text(
+                        text = skip,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                if (parsed.skipped.size > 6) {
+                    Text(
+                        text = "and " + (parsed.skipped.size - 6) + " more skipped",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Row {
+                Button(onClick = {
+                    state.confirmSf2Import()
+                    state.closeOverlay()
+                }) {
+                    Text("Import")
+                }
+                Spacer(Modifier.width(10.dp))
+                OutlinedButton(onClick = { state.cancelImport() }) { Text("Cancel") }
+            }
+        }
     }
 }
 

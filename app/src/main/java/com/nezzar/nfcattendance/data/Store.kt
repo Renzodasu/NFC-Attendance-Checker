@@ -111,9 +111,14 @@ class Store(context: Context) {
                     j++
                     if (s == null) continue
                     val studentName = s.optString("name", "").trim()
-                    val uid = Uid.normalize(s.optString("uid", ""))
-                    if (studentName.isEmpty() || uid.isEmpty()) continue
-                    students += Student(studentName, uid)
+                    // A blank UID is "no card yet", which is a real state for a class
+                    // read out of a school form. A blank NAME is not a student.
+                    if (studentName.isEmpty()) continue
+                    students += Student(
+                        name = studentName,
+                        uid = Uid.normalize(s.optString("uid", "")),
+                        sex = sexOf(s.optString("sex", "")),
+                    )
                 }
             }
             // A legacy file has no updatedAt; 0 means "never recorded".
@@ -122,9 +127,32 @@ class Store(context: Context) {
                 students = students,
                 updatedAt = obj.optLong("updatedAt", 0L),
                 subject = obj.optString("subject", "").trim(),
+                sf2 = parseSf2(obj.optJSONObject("sf2")),
             )
         }
         return out
+    }
+
+    /** "M" or "F" survive; anything else is unknown, which is written as "". */
+    private fun sexOf(raw: String): String {
+        val value = raw.trim().uppercase()
+        return if (value == "M" || value == "F") value else ""
+    }
+
+    private fun parseSf2(obj: JSONObject?): Sf2Header? {
+        if (obj == null) return null
+        val header = Sf2Header(
+            schoolId = obj.optString("schoolId", "").trim(),
+            schoolName = obj.optString("schoolName", "").trim(),
+            schoolYear = obj.optString("schoolYear", "").trim(),
+            gradeLevel = obj.optString("gradeLevel", "").trim(),
+            sectionLabel = obj.optString("sectionLabel", "").trim(),
+        )
+        // An empty object is the same as no header at all.
+        val blank = header.schoolId.isEmpty() && header.schoolName.isEmpty() &&
+            header.schoolYear.isEmpty() && header.gradeLevel.isEmpty() &&
+            header.sectionLabel.isEmpty()
+        return if (blank) null else header
     }
 
     fun saveSections(sections: List<Section>) {
@@ -137,11 +165,22 @@ class Store(context: Context) {
                 val s = JSONObject()
                 s.put("name", student.name)
                 s.put("uid", student.uid)
+                if (student.sex.isNotEmpty()) s.put("sex", student.sex)
                 students.put(s)
             }
             obj.put("students", students)
             obj.put("updatedAt", section.updatedAt)
             if (section.subject.isNotBlank()) obj.put("subject", section.subject)
+            val header = section.sf2
+            if (header != null) {
+                val sf2 = JSONObject()
+                sf2.put("schoolId", header.schoolId)
+                sf2.put("schoolName", header.schoolName)
+                sf2.put("schoolYear", header.schoolYear)
+                sf2.put("gradeLevel", header.gradeLevel)
+                sf2.put("sectionLabel", header.sectionLabel)
+                obj.put("sf2", sf2)
+            }
             array.put(obj)
         }
         val root = JSONObject()
@@ -271,6 +310,7 @@ class Store(context: Context) {
             val s = JSONObject()
             s.put("name", student.name)
             s.put("uid", student.uid)
+            if (student.sex.isNotEmpty()) s.put("sex", student.sex)
             roster.put(s)
         }
         obj.put("roster", roster)
@@ -308,9 +348,12 @@ class Store(context: Context) {
                 i++
                 if (s == null) continue
                 val name = s.optString("name", "").trim()
-                val uid = Uid.normalize(s.optString("uid", ""))
-                if (name.isEmpty() || uid.isEmpty()) continue
-                roster += Student(name, uid)
+                if (name.isEmpty()) continue
+                roster += Student(
+                    name = name,
+                    uid = Uid.normalize(s.optString("uid", "")),
+                    sex = sexOf(s.optString("sex", "")),
+                )
             }
         }
         return AttendanceSession(
@@ -368,6 +411,26 @@ class Store(context: Context) {
     }
 
     /** Marks a session as no longer running, keeping its record. */
+    /**
+     * Every stored session, newest first, including one still running. The SF2
+     * export needs the whole month, not just the session on screen.
+     *
+     * A damaged file yields an empty list rather than throwing: the caller is a
+     * report that must still be able to say "no sessions recorded".
+     */
+    fun sessions(): List<AttendanceSession> {
+        val entries = sessionEntries() ?: return emptyList()
+        val out = mutableListOf<AttendanceSession>()
+        var i = 0
+        while (i < entries.length()) {
+            val obj = entries.optJSONObject(i)
+            i++
+            if (obj == null) continue
+            sessionOf(obj)?.let { out += it }
+        }
+        return out.sortedByDescending { it.startedAtMillis }
+    }
+
     fun endSession(sessionId: String) {
         val entries = sessionEntries() ?: return
         val out = JSONArray()
@@ -406,6 +469,6 @@ class Store(context: Context) {
 
     companion object {
         /** The format this build writes. Older files have no version key and are read as-is. */
-        const val SCHEMA_VERSION = 3
+        const val SCHEMA_VERSION = 4
     }
 }

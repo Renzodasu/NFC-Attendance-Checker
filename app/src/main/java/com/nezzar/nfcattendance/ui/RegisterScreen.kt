@@ -35,6 +35,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,11 +51,13 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import com.nezzar.nfcattendance.R
 import com.nezzar.nfcattendance.data.NfcAlarm
+import com.nezzar.nfcattendance.data.Sections
 import com.nezzar.nfcattendance.data.nfcAlarm
 import com.nezzar.nfcattendance.data.readerLine
 
@@ -230,6 +233,40 @@ fun RegisterScreen(state: AppState, activity: Activity, modifier: Modifier = Mod
                                     "Already registered as " + duplicate +
                                         " - saving updates that name. Skip to leave the roster untouched."
                                 )
+                            }
+                            // A class read out of a school form arrives with names but no
+                            // cards. The card in hand is the one thing that can bind one, so
+                            // the names it could belong to sit above the name field.
+                            val waiting = Sections.unbound(section)
+                            if (waiting.isNotEmpty() && duplicate == null) {
+                                Spacer(Modifier.height(10.dp))
+                                SectionLabel("This card belongs to")
+                                Spacer(Modifier.height(4.dp))
+                                Note("Learners from a school form have no card yet. Choose one, or type a new name below.")
+                                for (student in waiting.take(12)) {
+                                    TextButton(
+                                        onClick = {
+                                            state.bindCard(student.name)
+                                            nameDraft = ""
+                                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) {
+                                        Text(
+                                            text = student.name,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                    }
+                                }
+                                if (waiting.size > 12) {
+                                    Text(
+                                        text = "and " + (waiting.size - 12) + " more waiting",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                             Spacer(Modifier.height(12.dp))
                             OutlinedTextField(
