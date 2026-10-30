@@ -1,6 +1,10 @@
 package com.nezzar.nfcattendance.ui
 
 import com.nezzar.nfcattendance.data.ClassMark
+import com.nezzar.nfcattendance.ui.theme.BrandAmber
+import com.nezzar.nfcattendance.ui.theme.BrandOnPrimary
+import com.nezzar.nfcattendance.ui.theme.LightAmber
+import com.nezzar.nfcattendance.ui.theme.isBrandDark
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.font.FontWeight
@@ -179,24 +183,42 @@ fun StatTile(
     label: String,
     modifier: Modifier = Modifier,
     accent: Boolean = false,
+    warning: Boolean = false,
 ) {
     val animated by animateIntAsState(
         targetValue = value,
         animationSpec = tween(durationMillis = 320, easing = EmphasizedDecelerate),
         label = "stat",
     )
+    // Amber is the only colour besides the green accent, and it is reserved for
+    // "this needs a look" - never for a number that is fine.
+    val dark = isBrandDark()
+    val warnFill = if (dark) BrandAmber else LightAmber
+    val warnInk = if (dark) BrandOnPrimary else Color.White
     val container by animateColorAsState(
-        targetValue = if (accent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+        targetValue = when {
+            warning -> warnFill
+            accent -> MaterialTheme.colorScheme.primary
+            else -> MaterialTheme.colorScheme.surfaceVariant
+        },
         animationSpec = tween(durationMillis = MotionTouchMs, easing = EmphasizedDecelerate),
         label = "statContainer",
     )
     val content by animateColorAsState(
-        targetValue = if (accent) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        targetValue = when {
+            warning -> warnInk
+            accent -> MaterialTheme.colorScheme.onPrimary
+            else -> MaterialTheme.colorScheme.onSurface
+        },
         animationSpec = tween(durationMillis = MotionTouchMs, easing = EmphasizedDecelerate),
         label = "statContent",
     )
     val caption by animateColorAsState(
-        targetValue = if (accent) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+        targetValue = when {
+            warning -> warnInk
+            accent -> MaterialTheme.colorScheme.onPrimary
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
+        },
         animationSpec = tween(durationMillis = MotionTouchMs, easing = EmphasizedDecelerate),
         label = "statCaption",
     )
@@ -365,6 +387,7 @@ fun ClassBadge(
                     letterSpacing = 0.sp,
                 ),
                 color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
             )
         }
     }

@@ -70,12 +70,10 @@ fun NewSectionScreen(state: AppState, modifier: Modifier = Modifier) {
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // The shell header already says "New class"; this item keeps only the
+        // sentence, so the screen does not say the same thing twice.
         item(key = "title") {
-            CollapsingTitle(
-                title = "New class",
-                subtitle = "One class, one subject, one roster.",
-                listState = listState,
-            )
+            Note("One class, one subject, one roster.")
         }
 
         item(key = "create") {
@@ -141,6 +139,7 @@ fun NewSectionScreen(state: AppState, modifier: Modifier = Modifier) {
                             )
                         )
                     },
+                    enabled = !state.importBusy,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Icon(
@@ -149,7 +148,10 @@ fun NewSectionScreen(state: AppState, modifier: Modifier = Modifier) {
                         modifier = Modifier.size(18.dp),
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text("Import a class from .xlsx or .xls")
+                    Text(
+                        if (state.importBusy) "Reading the file..."
+                        else "Import a class from .xlsx or .xls"
+                    )
                 }
                 Spacer(Modifier.height(8.dp))
                 // A DepEd SF2 school form is NOT this format: importing one fails on the

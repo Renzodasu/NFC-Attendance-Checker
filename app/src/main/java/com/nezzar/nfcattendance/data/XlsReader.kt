@@ -48,10 +48,21 @@ object XlsReader {
         if (!isXls(bytes)) {
             throw IllegalArgumentException("This file is not an .xls workbook.")
         }
-        val stream = Ole2(bytes).stream("Workbook") ?: Ole2(bytes).stream("Book")
-        ?: throw IllegalArgumentException(
-            "This .xls file holds no Workbook stream, so there is nothing to read."
-        )
+        val ole = Ole2(bytes)
+        val stream = ole.stream("Workbook") ?: ole.stream("Book")
+        ?: run {
+            // A password-protected .xlsx is ALSO an OLE2 container: it carries
+            // EncryptedPackage instead of a Workbook stream. Saying "no Workbook
+            // stream" would send the teacher looking for the wrong problem.
+            if (ole.stream("EncryptedPackage") != null) {
+                throw IllegalArgumentException(
+                    "That workbook is password-protected. Save an unprotected copy, then import it."
+                )
+            }
+            throw IllegalArgumentException(
+                "This .xls file holds no Workbook stream, so there is nothing to read."
+            )
+        }
         return parse(stream)
     }
 
@@ -203,6 +214,11 @@ object XlsReader {
     private fun parse(stream: ByteArray): ReadBook {
         val records = records(stream)
         if (records.isEmpty()) throw IllegalArgumentException("That Workbook stream is empty.")
+        if (records.any { it.type == FILEPASS }) {
+            throw IllegalArgumentException(
+                "That workbook is password-protected. Save an unprotected copy, then import it."
+            )
+        }
 
         var version = 8
         records.firstOrNull()?.let { first ->
@@ -285,7 +301,7 @@ object XlsReader {
                 LABEL -> {
                     val row = u16(stream, data)
                     val column = u16(stream, data + 2)
-                    put(row, column, label(stream, data + 6, length - 6))
+                    put(row, column, label(stream, data + 6, length - 6, version))
                 }
                 NUMBER -> {
                     val row = u16(stream, data)
@@ -327,7 +343,7 @@ object XlsReader {
                 }
                 STRING -> {
                     if (pendingFormulaRow >= 0) {
-                        put(pendingFormulaRow, pendingFormulaColumn, label(stream, data, length))
+                        put(pendingFormulaRow, pendingFormulaColumn, label(stream, data, length, 8))
                         pendingFormulaRow = -1
                         pendingFormulaColumn = -1
                     }
@@ -443,7 +459,7 @@ object XlsReader {
                     builder.append(u16(data, position).toChar())
                     position += 2
                 } else {
-                    builder.append((data[position].toInt() and 0xFF).toChar())
+                    builder.append(narrow(data[position].toInt() and 0xFF))
                     position++
                 }
                 left--
@@ -470,21 +486,26 @@ object XlsReader {
 
     // ------------------------------------------------------------- cell rules
 
-    /** A LABEL/STRING body: 2-byte count, 1-byte flags, then the characters. */
-    private fun label(stream: ByteArray, data: Int, length: Int): String {
-        if (length < 3) return ""
+    /**
+     * A LABEL body: 2-byte count, then the characters. BIFF8 adds a 1-byte flags
+     * byte and may store them as UTF-16; BIFF5 has neither, so a flags byte read
+     * from a BIFF5 record would eat the first character of every name.
+     */
+    private fun label(stream: ByteArray, data: Int, length: Int, version: Int): String {
+        if (length < 2) return ""
         val count = u16(stream, data)
-        val wide = (stream[data + 2].toInt() and 0x01) != 0
-        var at = data + 3
+        val wide = version >= 8 && length >= 3 && (stream[data + 2].toInt() and 0x01) != 0
+        var at = data + if (version >= 8) 3 else 2
         val builder = StringBuilder(count)
         var i = 0
         while (i < count) {
-            if (at + 1 >= stream.size) break
+            if (at >= stream.size) break
             if (wide) {
+                if (at + 1 >= stream.size) break
                 builder.append(u16(stream, at).toChar())
                 at += 2
             } else {
-                builder.append((stream[at].toInt() and 0xFF).toChar())
+                builder.append(narrow(stream[at].toInt() and 0xFF))
                 at++
             }
             i++
@@ -502,12 +523,28 @@ object XlsReader {
                 builder.append(u16(stream, at).toChar())
                 at += 2
             } else {
-                builder.append((stream[at].toInt() and 0xFF).toChar())
+                builder.append(narrow(stream[at].toInt() and 0xFF))
                 at++
             }
             i++
         }
         return builder.toString()
+    }
+
+    /**
+     * Windows-1252 for 0x80-0x9F, Latin-1 elsewhere. Excel's compressed strings are
+     * cp1252, not plain Latin-1: 0x92 is a right quote, not a control character that
+     * renders as a box on some phones and as nothing at all on others.
+     */
+    private fun narrow(byte: Int): Char = when (byte) {
+        0x80 -> '\u20AC'; 0x82 -> '\u201A'; 0x83 -> '\u0192'; 0x84 -> '\u201E'
+        0x85 -> '\u2026'; 0x86 -> '\u2020'; 0x87 -> '\u2021'; 0x88 -> '\u02C6'
+        0x89 -> '\u2030'; 0x8A -> '\u0160'; 0x8B -> '\u2039'; 0x8C -> '\u0152'
+        0x8E -> '\u017D'; 0x91 -> '\u2018'; 0x92 -> '\u2019'; 0x93 -> '\u201C'
+        0x94 -> '\u201D'; 0x95 -> '\u2022'; 0x96 -> '\u2013'; 0x97 -> '\u2014'
+        0x98 -> '\u02DC'; 0x99 -> '\u2122'; 0x9A -> '\u0161'; 0x9B -> '\u203A'
+        0x9C -> '\u0153'; 0x9E -> '\u017E'; 0x9F -> '\u0178'
+        else -> byte.toChar()
     }
 
     /** RK: bit 1 says integer, bit 0 says the value was divided by 100. */
@@ -591,6 +628,7 @@ object XlsReader {
     private const val CONTINUE = 0x003C
     private const val LABELSST = 0x00FD
     private const val LABEL = 0x0204
+    private const val FILEPASS = 0x002F
     private const val NUMBER = 0x0203
     private const val RK = 0x027E
     private const val MULRK = 0x00BD

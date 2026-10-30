@@ -228,15 +228,24 @@ class Store(context: Context) {
 
     // ---------------------------------------------------------------- sessions
 
-    private fun sessionEntries(): JSONArray {
+    /**
+     * The stored sessions, or null when the file exists but cannot be read.
+     *
+     * Null and empty are different on purpose. A damaged file must never be read as
+     * "no sessions yet": every save rewrites the whole file, so treating damage as
+     * empty would replace the teacher's entire attendance history with today's one
+     * session. When this returns null the writers below refuse to write instead.
+     */
+    private fun sessionEntries(): JSONArray? {
         val text = read(sessionsFile) ?: return JSONArray()
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return JSONArray()
         return try {
-            val trimmed = text.trim()
             // A file written before versioning is a bare array of sessions.
             if (trimmed.startsWith("[")) JSONArray(trimmed)
             else JSONObject(trimmed).optJSONArray("sessions") ?: JSONArray()
         } catch (t: Throwable) {
-            JSONArray()
+            null
         }
     }
 
@@ -320,7 +329,9 @@ class Store(context: Context) {
      * because a session is only ever its roster and its taps.
      */
     fun saveSession(session: AttendanceSession, live: Boolean = false, paused: Boolean = false) {
-        val entries = sessionEntries()
+        // Fail closed: the file is damaged, so the one tap in hand keeps its state in
+        // memory but never overwrites what may still be recoverable on disk.
+        val entries = sessionEntries() ?: return
         val out = JSONArray()
         var replaced = false
         var i = 0
@@ -344,7 +355,7 @@ class Store(context: Context) {
 
     /** The session that was still running when the app last stopped, if any. */
     fun liveSession(): LiveSession? {
-        val entries = sessionEntries()
+        val entries = sessionEntries() ?: return null
         var i = entries.length() - 1
         while (i >= 0) {
             val obj = entries.optJSONObject(i)
@@ -358,7 +369,7 @@ class Store(context: Context) {
 
     /** Marks a session as no longer running, keeping its record. */
     fun endSession(sessionId: String) {
-        val entries = sessionEntries()
+        val entries = sessionEntries() ?: return
         val out = JSONArray()
         var i = 0
         while (i < entries.length()) {

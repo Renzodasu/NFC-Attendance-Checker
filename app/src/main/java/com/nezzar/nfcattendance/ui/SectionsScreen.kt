@@ -1,6 +1,8 @@
 package com.nezzar.nfcattendance.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -39,6 +41,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nezzar.nfcattendance.R
@@ -73,12 +76,13 @@ fun SectionsScreen(state: AppState) {
         }
     }
 
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
         item(key = "title") {
             CollapsingTitle(
                 title = "My classes",
@@ -221,7 +225,9 @@ fun SectionsScreen(state: AppState) {
                         // roster count inside one of them.
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.height(IntrinsicSize.Min),
+                            modifier = Modifier
+                                .height(IntrinsicSize.Min)
+                                .heightIn(min = 168.dp),
                         ) {
                             pair.forEach { section ->
                                 ClassPlate(
@@ -238,45 +244,52 @@ fun SectionsScreen(state: AppState) {
             }
         }
 
-        if (state.sections.isNotEmpty()) {
-            item(key = "actions") {
-                val section = state.selectedSection
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(
-                        onClick = {
-                            section?.let { state.selectSection(it.name) }
-                            state.openRegister()
-                        },
-                        enabled = section != null,
-                        modifier = Modifier.weight(1f).height(56.dp),
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_nav_register),
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text("Register")
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            section?.let { state.selectSection(it.name) }
-                            state.openSection()
-                        },
-                        enabled = section != null,
-                        modifier = Modifier.weight(1f).height(56.dp),
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_edit),
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text("Edit class")
-                    }
-                }
+    }
+
+    // Register and Edit act on the selected plate, so the pair stays pinned above
+    // the tab bar instead of scrolling away with a grid of forty classes.
+    if (state.sections.isNotEmpty()) {
+        val section = state.selectedSection
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 10.dp),
+        ) {
+            Button(
+                onClick = {
+                    section?.let { state.selectSection(it.name) }
+                    state.openRegister()
+                },
+                enabled = section != null,
+                modifier = Modifier.weight(1f).height(56.dp),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_nav_register),
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Register")
+            }
+            OutlinedButton(
+                onClick = {
+                    section?.let { state.selectSection(it.name) }
+                    state.openSection()
+                },
+                enabled = section != null,
+                modifier = Modifier.weight(1f).height(56.dp),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_edit),
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Edit class")
             }
         }
+    }
     }
 }
 
@@ -299,16 +312,21 @@ private fun ClassPlate(
         border = if (selected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
         modifier = modifier
             .fillMaxHeight()
-            .heightIn(min = 168.dp)
             .pressScale(interaction)
-            .cardClick(interaction, onClick = onSelect),
+            .selectable(
+                selected = selected,
+                interactionSource = interaction,
+                indication = LocalIndication.current,
+                role = Role.RadioButton,
+                onClick = onSelect,
+            ),
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             ClassBadge(name = section.name, selected = selected, size = 46.dp)
             Spacer(Modifier.height(12.dp))
             Text(
                 text = section.name,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -324,15 +342,28 @@ private fun ClassPlate(
                 )
             }
             Spacer(Modifier.weight(1f))
-            Text(
-                text = if (section.students.size == 1) "1 student" else section.students.size.toString() + " students",
-                style = MaterialTheme.typography.labelSmall,
-                color = if (selected) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // A check, not only a green edge: the selected class has to be
+                // readable without relying on colour.
+                if (selected) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_check),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Spacer(Modifier.width(5.dp))
+                }
+                Text(
+                    text = if (section.students.size == 1) "1 student" else section.students.size.toString() + " students",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
         }
     }
 }

@@ -43,6 +43,13 @@ versions in the form `0.0.N`.
 - **Display type.** Three display styles (34, 42, 52 sp) were added to the
   Spectral family, because nothing above 34 sp existed and any larger heading
   silently fell back to Roboto.
+- **An import that cannot freeze the screen.** The picked file is now read and
+  parsed off the main thread, behind a **Reading the file...** label, with the
+  size checked before the first byte is buffered and again while reading. A
+  picked video or a 20 MB workbook can no longer lock the app or exhaust memory.
+- **A wrong file gets a plain answer.** A password-protected workbook, an OLE
+  file that is not a spreadsheet, and a format the app cannot open now say what
+  happened instead of showing the raw exception text.
 
 ### Changed
 
@@ -60,6 +67,18 @@ versions in the form `0.0.N`.
 - **Screens show the class itself.** The header pill, the Scan result header and
   the Report result card carry the class mark and name, so identity no longer
   depends on remembering a symbol.
+- **The report leads with names.** The absent list now sits directly under the
+  class identity, before the Result tiles, the chart and Export - the names are
+  what a teacher opens the screen to read. **Absent** is the only tile that takes
+  the amber warning tone, and only while there is someone to see; green stays off
+  bad news.
+- **Register and Edit stay put.** The pair is pinned above the session bar instead
+  of sitting at the end of the class grid, where it scrolled away with forty
+  classes on the list.
+- **The chosen class is marked twice.** A check sits beside its roster count, so
+  selection is readable without relying on the green edge.
+- **Titles are said once.** The New class page and the guide no longer repeat the
+  header's own title.
 
 ### Removed
 
@@ -84,9 +103,19 @@ versions in the form `0.0.N`.
   (`BSCE-3A`) repeated the grade. The first **letter** is preferred now, with the
   digit kept only for a noun that has no letters at all.
 - **A two-line class name no longer clips the roster count** on its plate.
+- **A damaged session file can no longer erase the history.** Every tap rewrites
+  `sessions.json`; when that file could not be parsed the old code treated it as
+  empty and saved the current session over every past one. Writes now fail closed
+  - the damaged file is kept, the screen stays as it was, and nothing is
+  overwritten.
 - **Two `.xls` reader defects** were caught by the new tests before release:
   wrong BOUNDSHEET field offsets (every workbook reported no worksheet) and a
   shared-string read that could straddle a record edge on a wide character.
+- **Names with accents keep their apostrophes** in `.xls` files: compressed
+  strings were decoded one byte at a time, so `D'Angelo` arrived with a control
+  character where the right single quote should be. The reader now uses the
+  Windows-1252 table.
+- **A big mark no longer wraps** inside its badge: `12M` stays on one line.
 
 ## [0.0.4] - 2026-10-07
 

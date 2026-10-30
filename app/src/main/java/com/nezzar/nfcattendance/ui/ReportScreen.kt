@@ -70,18 +70,48 @@ fun ReportScreen(state: AppState) {
                 )
             }
 
+            // The conclusion comes before the numbers: this screen is opened to read
+            // names, and the names to read are the students who were not in the room.
+            item(key = "absent-label") {
+                SectionLabel("Absent: " + resolved.absent.size)
+            }
+            if (resolved.absent.isEmpty()) {
+                item(key = "absent-none") {
+                    Note("Everyone on the roster was present.")
+                }
+            }
+            items(resolved.absent, key = { it.uid }) { student ->
+                BrandCard(modifier = Modifier.animateItem()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(student.name, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                text = student.uid,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        // A broken, lost or never-made card must not be able to turn a
+                        // present student into an absent one. The sheet records which.
+                        TextButton(onClick = { state.markPresent(student.uid) }) {
+                            Text("Mark present")
+                        }
+                    }
+                }
+            }
+
             item(key = "stats") {
                 BrandCard {
                     SectionLabel("Result")
                     Spacer(Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        // Green marks the number this screen exists to produce, and it
+                        // Amber marks the number this screen exists to produce, and it
                         // stays off while that number is still zero.
                         StatTile(
                             value = resolved.absent.size,
                             label = "absent",
                             modifier = Modifier.weight(1f),
-                            accent = resolved.absent.isNotEmpty(),
+                            warning = resolved.absent.isNotEmpty(),
                         )
                         StatTile(
                             value = resolved.late.size,
@@ -135,34 +165,6 @@ fun ReportScreen(state: AppState) {
                         note = state.reportError,
                         onShare = state.reportUri?.let { uri -> { state.shareFile(uri) } },
                     )
-                }
-            }
-
-            item(key = "absent-label") {
-                SectionLabel("Absent: " + resolved.absent.size)
-            }
-            if (resolved.absent.isEmpty()) {
-                item(key = "absent-none") {
-                    Note("Everyone on the roster was present.")
-                }
-            }
-            items(resolved.absent, key = { it.uid }) { student ->
-                BrandCard(modifier = Modifier.animateItem()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(student.name, style = MaterialTheme.typography.bodyLarge)
-                            Text(
-                                text = student.uid,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        // A broken, lost or never-made card must not be able to turn a
-                        // present student into an absent one. The sheet records which.
-                        TextButton(onClick = { state.markPresent(student.uid) }) {
-                            Text("Mark present")
-                        }
-                    }
                 }
             }
 

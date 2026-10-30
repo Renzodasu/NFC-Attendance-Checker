@@ -114,10 +114,7 @@ fun TutorialScreen(state: AppState, modifier: Modifier = Modifier) {
             return@Column
         }
 
-        Text(
-            text = "How to use",
-            style = MaterialTheme.typography.headlineMedium,
-        )
+        // The shell header already says "How to use".
         Note("Step " + (index + 1) + " of " + Steps.size + " - swipe it away, or tap Next step.")
 
         Spacer(Modifier.height(14.dp))

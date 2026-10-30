@@ -123,6 +123,15 @@ class AppState(application: Application) : AndroidViewModel(application) {
             Executors.newSingleThreadExecutor().asCoroutineDispatcher(),
     )
 
+    /**
+     * Reading a picked workbook runs here, away from both the UI thread and [io]:
+     * a school workbook can take seconds to parse, and a save queued behind it
+     * would hold up the tap that caused it.
+     */
+    private val imports = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO,
+    )
+
     var screen by mutableStateOf(Screen.SECTIONS)
 
     /** Non-null while Settings or the tutorial is open over the tabs. */
@@ -176,6 +185,9 @@ class AppState(application: Application) : AndroidViewModel(application) {
     var importSourceName by mutableStateOf("")
     var importTargetName by mutableStateOf("")
     var importError by mutableStateOf("")
+
+    /** True while a picked file is being read, so the picker cannot be started twice. */
+    var importBusy by mutableStateOf(false)
 
     // Register mode ----------------------------------------------------------
     var registerState by mutableStateOf(RegisterState())
@@ -651,39 +663,80 @@ class AppState(application: Application) : AndroidViewModel(application) {
      */
     fun stageImport(uri: Uri) {
         importError = ""
-        try {
-            val parsed = appContext.contentResolver.openInputStream(uri)?.use { stream ->
-                val bytes = stream.readBytes()
-                if (bytes.isEmpty()) throw IllegalArgumentException("That file is empty.")
-                if (bytes.size > XlsReader.MAX_BYTES) {
-                    throw IllegalArgumentException(
-                        "That file is too big to be a class list (" + bytes.size / 1024 + " KB)."
-                    )
-                }
-                val book = if (XlsReader.isXls(bytes)) {
-                    XlsReader.read(bytes)
+        importedFile = null
+        importBusy = true
+        imports.launch {
+            try {
+                val parsed = readImport(uri)
+                importSourceName = displayName(uri)
+                if (parsed.error.isNotEmpty()) {
+                    importError = parsed.error
                 } else {
-                    XlsxReader.read(bytes.inputStream())
+                    importedFile = parsed
+                    importTargetName = parsed.sectionName.ifBlank { "Imported section" }
                 }
-                val sheet = book.sheet(RosterImporter.SHEET_ROSTER)
-                    ?: throw IllegalArgumentException(
-                        "That workbook has no sheet named Roster. Sheets found: " +
-                            book.sheetNames.joinToString(", ") + "."
-                    )
-                RosterImporter.parse(sheet)
-            } ?: throw IllegalArgumentException("The picked file could not be opened.")
-            if (parsed.error.isNotEmpty()) {
+            } catch (t: Throwable) {
                 importedFile = null
-                importError = parsed.error
-                return
+                importError = friendlyImportError(t)
+            } finally {
+                importBusy = false
             }
-            importedFile = parsed
-            importSourceName = displayName(uri)
-            importTargetName = parsed.sectionName.ifBlank { "Imported section" }
-        } catch (t: Throwable) {
-            importedFile = null
-            importError = t.message ?: t.toString()
         }
+    }
+
+    /**
+     * The actual read. The file's declared length is checked before a single byte is
+     * pulled, then the bytes are read through a hard cap: a picked video must fail
+     * as "too big", never as an out-of-memory crash.
+     */
+    private fun readImport(uri: Uri): RosterImporter.Parsed {
+        val resolver = appContext.contentResolver
+        val declared = resolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
+        if (declared > XlsReader.MAX_BYTES) throw tooBig(declared)
+        val bytes = readCapped(resolver, uri)
+        if (bytes.isEmpty()) throw IllegalArgumentException("That file is empty.")
+        val book = if (XlsReader.isXls(bytes)) {
+            XlsReader.read(bytes)
+        } else {
+            XlsxReader.read(bytes.inputStream())
+        }
+        val sheet = book.sheet(RosterImporter.SHEET_ROSTER)
+            ?: throw IllegalArgumentException(
+                "That workbook has no sheet named Roster. Sheets found: " +
+                    book.sheetNames.joinToString(", ") + "."
+            )
+        return RosterImporter.parse(sheet)
+    }
+
+    private fun readCapped(resolver: android.content.ContentResolver, uri: Uri): ByteArray {
+        val input = resolver.openInputStream(uri)
+            ?: throw IllegalArgumentException("The picked file could not be opened.")
+        input.use { stream ->
+            val buffer = ByteArrayOutputStream()
+            val chunk = ByteArray(64 * 1024)
+            while (true) {
+                val read = stream.read(chunk)
+                if (read < 0) break
+                if (read > 0) buffer.write(chunk, 0, read)
+                if (buffer.size() > XlsReader.MAX_BYTES) throw tooBig(buffer.size().toLong())
+            }
+            return buffer.toByteArray()
+        }
+    }
+
+    private fun tooBig(bytes: Long) = IllegalArgumentException(
+        "That file is too big to be a class list (" + bytes / 1024 + " KB)."
+    )
+
+    /**
+     * Anything that is not an Excel workbook is reported as exactly that. The readers
+     * throw for a number of internal reasons; none of them is a sentence a teacher
+     * should have to read at a door.
+     */
+    private fun friendlyImportError(t: Throwable): String {
+        val text = t.message.orEmpty().trim()
+        return if (text.startsWith("That ")) text
+        else "That file is not an Excel workbook (.xlsx or .xls)."
     }
 
     fun importSectionNameChanged(value: String) {
