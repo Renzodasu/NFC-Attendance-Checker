@@ -39,7 +39,7 @@ fun alarmHeadline(alarm: NfcAlarm): String? = when (alarm) {
  */
 fun readerLine(nfc: NfcState, paused: Boolean, registering: Boolean = false): String = when {
     nfc == NfcState.UNSUPPORTED ->
-        "No NFC adapter on this device (an emulator never has one)."
+        "No NFC adapter on this device, so a tap has nowhere to land."
     nfc == NfcState.DISABLED ->
         "NFC is switched off, so a tap cannot reach this app. Turn it on with the " +
             "button below, then hold an ID to the phone."
@@ -48,6 +48,21 @@ fun readerLine(nfc: NfcState, paused: Boolean, registering: Boolean = false): St
             "class (or a late arrival) is ready."
     registering -> "Reader mode active - hold the ID card to the phone's NFC antenna."
     else -> "Reader mode active - hold each student ID to the phone's NFC antenna."
+}
+
+/**
+ * The same state, cut to the length of the Scan screen's single reader line.
+ *
+ * [readerLine] is written for a card body that has room for a full sentence with
+ * a cause and a remedy. The Scan tab has one line beside a dot, so it gets the
+ * verb and nothing else: what the teacher has to do, not why the radio did it.
+ * Kept here, next to the long form, so the two cannot contradict each other.
+ */
+fun shortReaderLine(nfc: NfcState, paused: Boolean): String = when {
+    nfc == NfcState.UNSUPPORTED -> "No NFC on this phone - mark presence by hand"
+    nfc == NfcState.DISABLED -> "NFC is off - a tap cannot reach the app"
+    paused -> "Paused - taps are ignored until you resume"
+    else -> "Ready - hold an ID to the phone"
 }
 
 /**

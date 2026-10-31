@@ -369,13 +369,10 @@ fun RegisterScreen(state: AppState, activity: Activity, modifier: Modifier = Mod
                     }
                 }
             }
-        } else {
-            item(key = "idle", contentType = "liveCard") {
-                BrandCard(modifier = Modifier.animateItem()) {
-                    Note("Not registering yet. Press Start registering, then tap a card.")
-                }
-            }
         }
+        // Idle needs no third card: the LIVE card already says "Idle - not
+        // registering" and the reader card carries the green Start button that
+        // changes it. A card that only repeats the one above it is noise.
 
     }
 }

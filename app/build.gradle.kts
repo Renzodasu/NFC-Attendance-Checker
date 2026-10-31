@@ -4,8 +4,8 @@ plugins {
 }
 
 // Single source of truth for the version shown in the APK file name and the manifest.
-// 0.0.9: import, then bind cards - and the QR fallback is gone.
-val androidVersionName = "0.0.9"
+// 0.0.10: one question per tab - compact Scan, absent-first Report, one-line player.
+val androidVersionName = "0.0.10"
 
 android {
     namespace = "com.nezzar.nfcattendance"
@@ -17,7 +17,7 @@ android {
         applicationId = "com.nezzar.nfcattendance"
         minSdk = 24
         targetSdk = 37
-        versionCode = 9
+        versionCode = 10
         versionName = androidVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

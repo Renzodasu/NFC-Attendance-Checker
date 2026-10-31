@@ -49,6 +49,14 @@ object ReportBuilder {
     /** "3:16:45 PM" - when a card was read. */
     fun timeText(millis: Long): String = SimpleDateFormat(TIME_ONLY, Locale.US).format(Date(millis))
 
+    /**
+     * "Tue 14:32" - the weekday and clock of a session, for the one meta line
+     * under a report heading. Weekday first because a teacher checking a sheet on
+     * Friday needs to know it was Tuesday before they need the minute.
+     */
+    fun dayTimeText(millis: Long): String =
+        SimpleDateFormat("EEE HH:mm", Locale.US).format(Date(millis))
+
     /** "4 October 2026, 3:16:45 PM" - the full stamp, for a session header. */
     fun stampText(millis: Long): String =
         SimpleDateFormat("$DATE_ONLY, $TIME_ONLY", Locale.US).format(Date(millis))

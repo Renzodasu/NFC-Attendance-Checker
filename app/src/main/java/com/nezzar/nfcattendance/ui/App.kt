@@ -67,6 +67,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
@@ -456,10 +457,14 @@ private fun BottomBar(state: AppState) {
                     )
                 },
                 label = { Text(destination.label) },
+                // Green is this app's one signal: it marks present, it marks the
+                // selected class. A filled pill behind the tabs made a second green
+                // shape that means nothing, so the pill is gone and the icon and
+                // label are the selection.
                 colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = MaterialTheme.colorScheme.onPrimary,
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
                     selectedTextColor = MaterialTheme.colorScheme.primary,
-                    indicatorColor = MaterialTheme.colorScheme.primary,
+                    indicatorColor = Color.Transparent,
                     unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 ),
@@ -480,10 +485,10 @@ private fun SessionBar(state: AppState) {
     val pending = register.pendingUid
     val registering = register.armed || pending != null
 
-    val ownedHere = when {
-        running -> state.screen == Screen.SCAN || state.screen == Screen.REPORT
-        else -> state.overlay == Overlay.REGISTER
-    }
+    // Scan prints the live numbers itself and owns the one control at the bottom
+    // of the screen; repeating them in a strip above the tabs was the same three
+    // facts twice, one of them a composition behind.
+    val ownedHere = state.screen == Screen.SCAN || state.overlay == Overlay.REGISTER
     val visible = (running || registering) && !ownedHere
 
     AnimatedVisibility(
@@ -501,50 +506,39 @@ private fun SessionBar(state: AppState) {
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 6.dp),
         ) {
+            // One line: whose session, what it has counted, and the action. The
+            // second line it used to have repeated numbers the Scan tab prints in
+            // full, on a strip that pushed the tab bar up the screen.
             Row(
-                modifier = Modifier.padding(start = 14.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+                modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Icon(
-                    painter = painterResource(if (running) R.drawable.ic_nav_scan else R.drawable.ic_nav_register),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(22.dp),
+                NfcLight(state, dot = 8.dp)
+                Text(
+                    text = if (running) (session?.sectionName ?: "Session") else (state.selectedSection?.name ?: "Registering"),
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
                 )
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        NfcLight(state, dot = 8.dp)
-                        Text(
-                            text = if (running) (session?.sectionName ?: "Session") else (state.selectedSection?.name ?: "Registering"),
-                            style = MaterialTheme.typography.titleSmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                    Text(
-                        text = if (running) {
-                            (if (state.paused) "Paused  ·  " else "") +
-                                "Present " + (resolved?.present?.size ?: 0) +
-                                "  ·  Late " + (resolved?.late?.size ?: 0) +
-                                "  ·  Absent " + (resolved?.absent?.size ?: 0) +
-                                "  ·  Unmatched " + (resolved?.unmatched?.size ?: 0)
-                        } else {
-                            if (pending != null) "Card read: " + pending else "Waiting for a card"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+                Text(
+                    text = when {
+                        running -> (if (state.paused) "Paused  ·  " else "") +
+                            (resolved?.present?.size ?: 0) + " present"
+                        pending != null -> "Card read"
+                        else -> "Waiting"
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
                 TextButton(
                     onClick = {
                         if (running) state.stopSession() else state.openRegister()
                     },
                 ) {
-                    Text(if (running) "End session" else "Open")
+                    Text(if (running) "End" else "Open")
                 }
             }
         }

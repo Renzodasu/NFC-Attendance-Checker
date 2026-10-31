@@ -21,7 +21,7 @@ Built for a **class beadle**: one roster per class, tap each card once, then exp
   - **Every answer has a sound**, because at a door the teacher is looking at the student, not the screen: a clean tick for on time, a two-note rise for late, a low double knock for a card already counted, a buzz for a card that is not on the roster, and one long tone when there is nothing to record against. The tones are generated on the phone, play in silent mode, and can be switched off in Settings.
   - **The screen never claims to be ready while the antenna is deaf.** If NFC is off the live bar says **NFC is off** and offers one 48 dp button that opens the system's NFC switch; a phone with no NFC adapter says so in words. A **paused** session is also the only place that says paused.
 
-- **📈 Chart** — the Session report draws the numbers it states: a **pie** of on time / late / absent, a **line** of how the room filled against the late mark, or a **bar** of how each presence was recorded (NFC or by hand, with QR only in sessions recorded before 0.0.9). Settings chooses the lens, and the legend under every chart writes the figures out, so nothing depends on colour alone.
+- **📈 Chart** — the Session report draws the numbers it states: a **pie** of on time / late / absent, a **line** of how the room filled against the late mark, or a **bar** of how each presence was recorded (NFC or by hand, with QR only in sessions recorded before 0.0.9). The card stays closed until it is tapped, so the absent list is what the tab opens on. Settings chooses the lens, and the legend under every chart writes the figures out, so nothing depends on colour alone; an unmatched tap gets a **hollow** chip, because it is counted but is not one of the class.
 
 - **📋 Report** — **absent** first, then **late**, **present**, and **unmatched** cards. Every attendance row carries the **date and time** of the read. The tab opens on the class's latest session even after the app was closed, and a learner with no card can be **marked present by hand**.
 
@@ -57,9 +57,19 @@ with the deck: there is one look, and it is the same on every screen.
 | --- | --- |
 | ![New class: name it, write its subject, or import a roster](docs/screenshots/new-section.png) | ![Register: tap an ID card, type the name, save](docs/screenshots/register.png) |
 
-| Scan |
-| --- |
-| ![Scan: start a session and tap each ID once](docs/screenshots/scan.png) |
+| Scan | Report |
+| --- | --- |
+| ![Scan: the four numbers on one line, one pinned control](docs/screenshots/scan.png) | ![Report: absent first, the chart one tap away](docs/screenshots/report.png) |
+
+| Chart | Classes |
+| --- | --- |
+| ![The session chart: a donut of on time, late and absent, with every figure written out below](docs/screenshots/chart.png) | ![Classes: one plate per class, the chosen one edged in green](docs/screenshots/sections.png) |
+
+One question per tab, and one control per tab. **Scan** states the session in four
+numbers on a single line and keeps **Start / Pause / End** pinned above the tab bar,
+never scrolled away; the running session also rides along as a one-line player on the
+other tabs. **Report** leads with the learners who are absent, because that is the
+list a teacher acts on, and keeps the drawing collapsed until it is asked for.
 
 Also included: a registered-students page for the full roster with per-student
 standing, a full-screen student editor, Settings and **How to use** as two icons

@@ -91,7 +91,9 @@ fun ReportChartCard(
         wanted == ChartKind.BAR && (methods.empty || composition.rosterSize == 1) -> ChartKind.PIE
         else -> wanted
     }
-    var open by remember { mutableStateOf(true) }
+    // Closed by default: the summary line answers the question a teacher opens this
+    // tab with, and the drawing is one tap away instead of one screen of scroll.
+    var open by remember { mutableStateOf(false) }
     val interaction = remember { MutableInteractionSource() }
 
     BrandCard(modifier) {
@@ -434,7 +436,7 @@ private fun BarRow(
 @Composable
 private fun CompositionLegend(composition: Composition) {
     val dark = isBrandDark()
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         composition.parts.forEach { part ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Swatch(part.tone, dark)
@@ -452,7 +454,7 @@ private fun CompositionLegend(composition: Composition) {
         }
         if (composition.unmatched > 0) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Swatch(ChartTone.UNMATCHED, dark)
+                Swatch(ChartTone.UNMATCHED, dark, hollow = true)
                 Spacer(Modifier.width(10.dp))
                 Text(
                     text = "Unmatched taps  \u00B7  not on this roster",
@@ -479,7 +481,7 @@ private fun CompositionLegend(composition: Composition) {
 @Composable
 private fun LineLegend(curve: ArrivalCurve) {
     val dark = isBrandDark()
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Swatch(ChartTone.ON_TIME, dark)
             Spacer(Modifier.width(10.dp))
@@ -515,11 +517,22 @@ private fun MethodLegend(chart: MethodChart) {
     )
 }
 
-/** One legend chip, sharing the tone and the texture the chart uses. */
+/**
+ * One legend chip, sharing the tone and the texture the chart uses. A hollow chip
+ * means "counted here, but not a slice of the ring" - the unmatched taps.
+ */
 @Composable
-private fun Swatch(tone: ChartTone, dark: Boolean) {
+private fun Swatch(tone: ChartTone, dark: Boolean, hollow: Boolean = false) {
     val colour = toneColour(tone, dark)
     Canvas(modifier = Modifier.size(12.dp)) {
+        if (hollow) {
+            drawRoundRect(
+                color = colour,
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx()),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.4.dp.toPx()),
+            )
+            return@Canvas
+        }
         drawRoundRect(
             color = colour,
             cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx()),

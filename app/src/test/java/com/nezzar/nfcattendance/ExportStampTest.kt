@@ -83,6 +83,20 @@ class ExportStampTest {
         assertEquals(ReportBuilder.NOT_RECORDED, value(rows, ReportBuilder.LABEL_DATE_UPDATED))
     }
 
+    /**
+     * The one meta line under a report heading: weekday first, then the clock,
+     * with no date - the sheet already knows which day it is.
+     */
+    @Test
+    fun theDayLineNamesTheWeekdayAndTheClock() {
+        val cal = java.util.Calendar.getInstance().apply {
+            set(2026, java.util.Calendar.OCTOBER, 4, 15, 16, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        // 4 October 2026 is a Sunday.
+        assertEquals("Sun 15:16", ReportBuilder.dayTimeText(cal.timeInMillis))
+    }
+
     @Test
     fun theRosterExportCarriesNameAndUidOnly() {
         val section = Section(

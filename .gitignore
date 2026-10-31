@@ -23,3 +23,5 @@ keystore.properties
 *.apk
 *.aab
 
+# Working screenshots, personal data - never commit
+/docs/shots/

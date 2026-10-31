@@ -4,6 +4,37 @@ All notable changes to NFC Attendance Checker. This project follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and uses date-based
 versions in the form `0.0.N`.
 
+## [0.0.10] - 2026-10-31
+
+### Changed
+
+- **Each tab answers one question.** *Scan* states the session in four numbers on a
+  single line - present, late, absent, unmatched - and keeps one control (Start, or
+  Pause and End) pinned above the tab bar where scrolling cannot reach it. The
+  last-read banner now appears only after a card has actually been read, and the
+  reader sentence below it no longer repeats the same alarm a second time.
+- **Report leads with the people to act on.** A header card carries the class name,
+  the day and clock, and one **Export** pill; the four numbers share a line beneath
+  it; the absent list follows, one line per learner with a green **Mark**; the chart
+  card stays closed until it is tapped, and **Late** and **Present** open on demand.
+- **The tab bar is a tab bar.** The selected tab is a green icon and label with no
+  pill behind it, and a running session rides above it as a one-line player naming
+  the class, its count and **End** / **Open**.
+- **The reader has four short sentences** - no NFC, NFC off, paused, ready - sized to
+  sit beside the dot instead of wrapping under it.
+
+### Fixed
+
+- **A card marked by hand no longer shows the antenna warning.** The last-read banner
+  outranked the mark and said *No NFC on this phone* over a tap the teacher had just
+  recorded by hand; it now names the learner and the method.
+- **The unmatched-tap row keeps its time on one line.** *8:22:00 AM* wrapped in the
+  Needs attention card and split the row in two.
+- **An unmatched tap gets a hollow chip** in the chart legend: it is counted on the
+  card, but it is not one of the class and must not look like an absent slice.
+
+All 149 unit tests pass, including the new short-reader-line and day-line checks.
+
 ## [0.0.9] - 2026-10-31
 
 ### Added
