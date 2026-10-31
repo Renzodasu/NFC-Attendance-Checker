@@ -552,7 +552,9 @@ class AppState(application: Application) : AndroidViewModel(application) {
     }
 
     fun exportReport() {
-        val current = session ?: return
+        // Export what the Report is showing: the open session, or the latest one
+        // stored for this class after a relaunch - the sheet is still wanted then.
+        val current = reportSession ?: return
         reportUri = null
         reportPath = null
         reportError = null

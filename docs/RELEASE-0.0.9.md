@@ -28,8 +28,8 @@ Three things were in the way of a teacher who had just imported the school form:
   identifier, so blank-card learners can be opened, renamed and removed. Two learners
   with the same name are handled as two separate rows.
 - **The Report remembers the day.** It shows the session that is running, or the
-  latest one stored for that class after a relaunch, with the same absent-first list
-  and the same **Mark present** button. A hand correction also works for a learner
+  latest one stored for that class after a relaunch, with the same absent-first list,
+  the same **Mark present** button and the same **Export this day** button. A hand correction also works for a learner
   who has no card yet, and it can still be made after the session has ended.
 - **QR is gone.** No QR generator, no camera scanner, no camera permission, no
   camera dependency. Older sessions that recorded a tap as QR still open and still

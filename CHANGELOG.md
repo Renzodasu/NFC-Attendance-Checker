@@ -18,7 +18,8 @@ versions in the form `0.0.N`.
   too, so the teacher does not have to end the session to arm a late arrival.
 - **The Report tab opens on the class's latest session.** After a stop or a
   relaunch, the last session on disk is shown for the selected class, so the
-  absent list a teacher reads after closing the app is still today's.
+  absent list a teacher reads after closing the app is still today's - and
+  *Export this day* still writes that session's sheet.
 - **A learner with no card can be marked present by hand.** *Mark present* on an
   absent row records a presence for that one learner - on a closed session as
   well - and writes the correction back with `live = false`.
