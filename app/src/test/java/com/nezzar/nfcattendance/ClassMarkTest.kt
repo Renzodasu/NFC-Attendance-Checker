@@ -17,7 +17,7 @@ class ClassMarkTest {
     fun aGradeAndADashNameKeepsTheGradeAndTheInitial() {
         assertEquals("3R", ClassMark.monogram("Grade 3 - Rizal"))
         assertEquals("3S", ClassMark.monogram("Grade 3 - Sampaguita"))
-        assertEquals("5P", ClassMark.monogram("Grade 5 - NARRA"))
+        assertEquals("5N", ClassMark.monogram("Grade 5 - NARRA"))
     }
 
     @Test

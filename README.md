@@ -59,13 +59,9 @@ with the deck: there is one look, and it is the same on every screen.
 | --- | --- |
 | ![New class: name it, write its subject, or import a roster](docs/screenshots/new-section.png) | ![Register: tap an ID card, type the name, save](docs/screenshots/register.png) |
 
-| Scan | Report |
-| --- | --- |
-| ![Scan: start a session and tap each ID once](docs/screenshots/scan.png) | ![Report: the absent-first result, and the school-form card](docs/screenshots/report.png) |
-
-| The month, printed as SF2 |
+| Scan |
 | --- |
-| ![The exported SF2: one column per school day, male and female blocks, ABSENT and PRESENT totals](docs/screenshots/sf2-form.png) |
+| ![Scan: start a session and tap each ID once](docs/screenshots/scan.png) |
 
 Also included: a registered-students page for the full roster with per-student
 standing, a full-screen student editor with the student's own **QR code**,

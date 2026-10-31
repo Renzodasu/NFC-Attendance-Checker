@@ -8,7 +8,7 @@ package com.nezzar.nfcattendance.data
  *
  *   "Grade 3 - Rizal"        -> "3R"
  *   "Grade 3 - Sampaguita"   -> "3S"
- *   "Grade 5 - NARRA" -> "5P"
+ *   "Grade 5 - NARRA"       -> "5N"
  *   "7 - Narra"              -> "7N"
  *   "Narra"                  -> "NA"
  *
