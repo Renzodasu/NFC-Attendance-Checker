@@ -63,5 +63,5 @@ fun startStatusText(sessionId: String, sectionName: String, nfc: NfcState): Stri
             "so no card can be read yet. Turn it on in Settings, then tap the IDs."
     NfcState.UNSUPPORTED ->
         "Session " + sessionId + " started for " + sectionName + ", but this phone has " +
-            "no NFC reader. Switch the reader to QR to take attendance."
+            "no NFC reader, so cards cannot be tapped. Mark presence by hand on the Report page."
 }

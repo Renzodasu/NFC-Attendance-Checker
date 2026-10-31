@@ -52,11 +52,14 @@ fun RosterScreen(state: AppState, modifier: Modifier = Modifier) {
     var filter by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
+    // Rows are addressed by position: a class read out of a school form has many
+    // learners with a blank UID, and a blank UID cannot be a list key.
     val shown = if (filter.isBlank()) {
-        students
+        students.indices.toList()
     } else {
-        students.filter {
-            it.name.contains(filter, ignoreCase = true) || it.uid.contains(filter, ignoreCase = true)
+        students.indices.filter { index ->
+            val student = students[index]
+            student.name.contains(filter, ignoreCase = true) || student.uid.contains(filter, ignoreCase = true)
         }
     }
 
@@ -134,11 +137,12 @@ fun RosterScreen(state: AppState, modifier: Modifier = Modifier) {
                 SectionLabel("Showing: " + shown.size + " of " + students.size)
             }
 
-            items(shown, key = { it.uid }) { student ->
+            items(shown, key = { "row-" + it }) { index ->
+                val student = students[index]
                 RosterRow(
                     student = student,
                     status = statusOf(student, resolved),
-                    onOpen = { state.openStudent(student.uid) },
+                    onOpen = { state.openStudent(index) },
                     modifier = Modifier.animateItem(),
                 )
             }
@@ -152,10 +156,16 @@ private fun statusOf(
     resolved: com.nezzar.nfcattendance.data.ResolvedAttendance?,
 ): String? {
     val current = resolved ?: return null
-    current.present.firstOrNull { it.student.uid == student.uid }?.let {
+    // Identity first: a form-imported class has blank UIDs, so two namesakes would
+    // otherwise both read as "on time" off one tap.
+    val matches: (Student) -> Boolean = { other ->
+        other === student ||
+            (student.uid.isNotBlank() && other.name == student.name && other.uid == student.uid)
+    }
+    current.present.firstOrNull { matches(it.student) }?.let {
         return "on time " + ReportBuilder.timeText(it.firstTapMillis)
     }
-    current.late.firstOrNull { it.student.uid == student.uid }?.let {
+    current.late.firstOrNull { matches(it.student) }?.let {
         return "late " + ReportBuilder.timeText(it.firstTapMillis)
     }
     return "absent"
@@ -190,7 +200,7 @@ private fun RosterRow(
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = student.uid,
+                        text = if (student.uid.isBlank()) "No card yet" else student.uid,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

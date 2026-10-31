@@ -255,11 +255,6 @@ class Store(context: Context) {
 
     fun setChartKind(value: String) = putSetting("chart", value)
 
-    /** "nfc" or "qr" - which reader the Scan tab opens with. */
-    fun readerMode(): String = settings().optString("readerMode", "nfc")
-
-    fun setReaderMode(value: String) = putSetting("readerMode", value)
-
     /** Whether a card tap makes a short tone. */
     fun isScanSoundOn(): Boolean = settings().optBoolean("scanSound", true)
 

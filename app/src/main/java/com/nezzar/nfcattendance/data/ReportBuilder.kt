@@ -77,7 +77,9 @@ object ReportBuilder {
         absent += listOf("Absent", resolved.absent.size.toString())
         absent += listOf("Unmatched taps", resolved.unmatched.size.toString())
         absent += listOf("Recorded by hand", resolved.manualCount.toString())
-        absent += listOf("Recorded by QR", resolved.countOf(AttendanceMethod.QR).toString())
+        // QR was removed in 0.0.9; only a session recorded before that can have any.
+        val qr = resolved.countOf(AttendanceMethod.QR)
+        if (qr > 0) absent += listOf("Recorded by QR", qr.toString())
         absent += listOf("")
         absent += listOf("Name")
         for (student in resolved.absent) absent += listOf(student.name)

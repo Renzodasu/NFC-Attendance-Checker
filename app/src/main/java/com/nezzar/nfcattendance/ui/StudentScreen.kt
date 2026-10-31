@@ -27,25 +27,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 import com.nezzar.nfcattendance.R
-import com.nezzar.nfcattendance.data.QrCode
 
 /**
  * One student, full screen. The roster row only opens this page, so nothing
  * destructive or fiddly sits inside a list the finger is trying to scroll.
  */
 @Composable
-fun StudentScreen(state: AppState, uid: String, modifier: Modifier = Modifier) {
+fun StudentScreen(state: AppState, index: Int, modifier: Modifier = Modifier) {
     val section = state.selectedSection
-    val student = section?.students?.firstOrNull { it.uid == uid }
-    var name by remember(uid, student?.name) { mutableStateOf(student?.name ?: "") }
-    var confirmRemove by remember(uid) { mutableStateOf(false) }
+    // Position, not UID: a class read out of a school form has learners with no
+    // card yet, and an empty UID must not open whichever row happened to be first.
+    val student = section?.students?.getOrNull(index)
+    var name by remember(index, student?.name) { mutableStateOf(student?.name ?: "") }
+    var confirmRemove by remember(index) { mutableStateOf(false) }
     // True while the name field holds the keyboard.
-    var typing by remember(uid) { mutableStateOf(false) }
+    var typing by remember(index) { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
-    // The Name card is the fourth block on the page (after the title, the card
-    // and the QR code): keep THAT one clear of the keyboard, not the one before it.
-    RevealTypingField(listState = listState, index = if (typing) 3 else null, active = typing)
+    // The Name card is the third block on the page (title, card, name): keep THAT
+    // one clear of the keyboard, not the one before it.
+    RevealTypingField(listState = listState, index = if (typing) 2 else null, active = typing)
 
     LazyColumn(
         state = listState,
@@ -56,7 +57,11 @@ fun StudentScreen(state: AppState, uid: String, modifier: Modifier = Modifier) {
         item(key = "title") {
             CollapsingTitle(
                 title = student?.name ?: "Student",
-                subtitle = "The card UID is what the phone reads. The name is just a label.",
+                subtitle = if (student?.uid.isNullOrBlank()) {
+                    "No card yet. Mark this learner present by hand, or bind a card in Register."
+                } else {
+                    "The card UID is what the phone reads. The name is just a label."
+                },
                 listState = listState,
             )
         }
@@ -76,25 +81,20 @@ fun StudentScreen(state: AppState, uid: String, modifier: Modifier = Modifier) {
                 BrandCard {
                     SectionLabel("Card")
                     Spacer(Modifier.height(8.dp))
-                    Text(text = student.uid, style = MaterialTheme.typography.headlineSmall)
-                    Spacer(Modifier.height(8.dp))
-                    Note(
-                        "Registered in " + (section?.name ?: "this section") +
-                            ". This UID is what the phone reads when the card is tapped."
-                    )
-                }
-            }
-
-            item(key = "qr") {
-                BrandCard {
-                    SectionLabel("QR code")
-                    Spacer(Modifier.height(10.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        QrCodeImage(text = QrCode.encode(student.uid), size = 132.dp)
-                        Spacer(Modifier.width(14.dp))
+                    if (student.uid.isBlank()) {
+                        Text(text = "No card yet", style = MaterialTheme.typography.headlineSmall)
+                        Spacer(Modifier.height(8.dp))
                         Note(
-                            "Show this when a card cannot be tapped. It carries the card UID - " +
-                                student.uid + " - and nothing else: no name, no student number."
+                            "This learner came from the school form. Open Register, tap a card, " +
+                                "and choose this name to bind it. Until then, mark them present by hand " +
+                                "on the Report page."
+                        )
+                    } else {
+                        Text(text = student.uid, style = MaterialTheme.typography.headlineSmall)
+                        Spacer(Modifier.height(8.dp))
+                        Note(
+                            "Registered in " + (section?.name ?: "this section") +
+                                ". This UID is what the phone reads when the card is tapped."
                         )
                     }
                 }
@@ -117,7 +117,7 @@ fun StudentScreen(state: AppState, uid: String, modifier: Modifier = Modifier) {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(
                             onClick = {
-                                state.renameStudent(uid, name)
+                                state.renameStudent(index, name)
                                 if (state.sectionsError.isEmpty()) state.closeOverlay()
                             },
                             modifier = Modifier.weight(1f).height(52.dp),
@@ -157,14 +157,19 @@ fun StudentScreen(state: AppState, uid: String, modifier: Modifier = Modifier) {
                         }
                     } else {
                         Note(
-                            "Remove " + student.name + "? Card " + student.uid +
-                                " becomes free to register to another student."
+                            if (student.uid.isBlank()) {
+                                "Remove " + student.name + "? They have no card, so nothing " +
+                                    "becomes free - they are just taken off the roster."
+                            } else {
+                                "Remove " + student.name + "? Card " + student.uid +
+                                    " becomes free to register to another student."
+                            }
                         )
                         Spacer(Modifier.height(12.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Button(
                                 onClick = {
-                                    state.removeStudent(uid)
+                                    state.removeStudent(index)
                                     state.closeOverlay()
                                 },
                                 colors = ButtonDefaults.buttonColors(

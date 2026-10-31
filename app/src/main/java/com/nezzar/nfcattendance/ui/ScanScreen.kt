@@ -85,56 +85,24 @@ fun ScanScreen(state: AppState, activity: Activity) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     NfcLight(state)
-                    SectionLabel(if (state.scanMode == ReaderMode.NFC) "NFC reader" else "QR reader")
+                    SectionLabel("NFC reader")
                 }
                 Spacer(Modifier.height(10.dp))
-                // Which reader this session uses. Never both: choosing QR turns reader
-                // mode off entirely, so a card cannot be half-read while the camera works.
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ReaderMode.entries.forEach { mode ->
-                        val chosen = state.scanMode == mode
-                        val pick = { state.useReaderMode(mode) }
-                        if (chosen) {
-                            Button(
-                                onClick = pick,
-                                modifier = Modifier.weight(1f).height(48.dp),
-                            ) { Text(mode.label) }
-                        } else {
-                            OutlinedButton(
-                                onClick = pick,
-                                modifier = Modifier.weight(1f).height(48.dp),
-                            ) { Text(mode.label) }
-                        }
-                    }
+                // The reader's sentence turns with the hardware and with Pause, not
+                // with a tap: it cross-fades so the eye follows what changed.
+                Crossfade(
+                    targetState = readerLine(nfc, state.paused),
+                    animationSpec = tween(MotionTouchMs, easing = EmphasizedDecelerate),
+                    label = "readerLine",
+                ) { line ->
+                    Text(text = line, style = MaterialTheme.typography.bodyMedium)
                 }
-                Spacer(Modifier.height(12.dp))
-                if (state.scanMode == ReaderMode.QR) {
-                    if (state.paused) {
-                        Text(
-                            text = "Paused - the reader is off and codes are ignored. Press " +
-                                "Resume when the class (or a late arrival) is ready.",
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    } else {
-                        QrReader(state)
-                    }
-                } else {
-                    // The reader's sentence turns with the hardware and with Pause, not
-                    // with a tap: it cross-fades so the eye follows what changed.
-                    Crossfade(
-                        targetState = readerLine(nfc, state.paused),
-                        animationSpec = tween(MotionTouchMs, easing = EmphasizedDecelerate),
-                        label = "readerLine",
-                    ) { line ->
-                        Text(text = line, style = MaterialTheme.typography.bodyMedium)
-                    }
-                    // A sentence that names the fix is a promise; the button is the way
-                    // to keep it. Only for a radio that is off - a phone without the
-                    // hardware has nothing to switch on.
-                    if (state.scanMode == ReaderMode.NFC && nfcAlarm(nfc, state.paused) == NfcAlarm.RADIO_OFF) {
-                        Spacer(Modifier.height(10.dp))
-                        NfcOffAction(activity)
-                    }
+                // A sentence that names the fix is a promise; the button is the way
+                // to keep it. Only for a radio that is off - a phone without the
+                // hardware has nothing to switch on.
+                if (nfcAlarm(nfc, state.paused) == NfcAlarm.RADIO_OFF) {
+                    Spacer(Modifier.height(10.dp))
+                    NfcOffAction(activity)
                 }
                 Spacer(Modifier.height(8.dp))
                 // The class this session belongs to, in the one band that stays on screen
@@ -347,13 +315,8 @@ private fun LastReadBar(state: AppState, activity: Activity) {
     val taps = state.session?.taps?.size ?: 0
     val show = state.running || last != null
     // The radio outranks the last card: "Ready - waiting for the first card" while
-    // the antenna is deaf is the lie this bar exists to stop. In QR mode the radio
-    // is not the reader at all, so there is nothing to warn about.
-    val alarm = if (state.scanMode == ReaderMode.NFC) {
-        nfcAlarm(state.nfcState, state.paused)
-    } else {
-        NfcAlarm.NONE
-    }
+    // the antenna is deaf is the lie this bar exists to stop.
+    val alarm = nfcAlarm(state.nfcState, state.paused)
 
     AnimatedVisibility(
         visible = show,

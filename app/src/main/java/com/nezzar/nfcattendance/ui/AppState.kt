@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.nezzar.nfcattendance.data.AttendanceResolver
 import com.nezzar.nfcattendance.data.HapticStrength
+import com.nezzar.nfcattendance.data.ManualKey
 import com.nezzar.nfcattendance.data.AttendanceSession
 import com.nezzar.nfcattendance.data.DocumentsExport
 import com.nezzar.nfcattendance.data.RegisterFlow
@@ -40,7 +41,6 @@ import com.nezzar.nfcattendance.data.ChartData
 import com.nezzar.nfcattendance.data.ChartKind
 import com.nezzar.nfcattendance.data.Outcome
 import com.nezzar.nfcattendance.data.ProcessedAttendance
-import com.nezzar.nfcattendance.data.QrCode
 import com.nezzar.nfcattendance.data.ReadCue
 import com.nezzar.nfcattendance.data.cueFor
 import com.nezzar.nfcattendance.nfc.NfcState
@@ -55,32 +55,10 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.Executors
 
-enum class Screen { SECTIONS, SCAN, REPORT }
+enum class Screen { SCAN, REPORT, SECTIONS }
 
 /** A full-screen page that opens over the tabs (a tab never becomes one of these). */
-enum class Overlay { SETTINGS, TUTORIAL, STUDENT, ROSTER, NEW_SECTION, SECTION, REGISTER, QR_CONFIRM }
-
-/**
- * Which reader the Scan tab is using. They are never both live: choosing QR turns
- * reader mode off entirely, so a card cannot be half-read while the camera works.
- */
-enum class ReaderMode(val label: String) {
-    NFC("NFC"),
-    QR("QR"),
-}
-
-/**
- * A scanned code that could not identify its student, waiting for the teacher. The
- * code's own text is not in here: it was used to answer one question and dropped, so
- * a student number can never reach the screen, the file or the export.
- */
-data class QrPending(
-    val candidates: List<Student>,
-    /** The name the teacher picked, or null while the names are still being chosen. */
-    val chosen: Student? = null,
-    /** True when the code itself suggested exactly one name. */
-    val suggested: Boolean = false,
-)
+enum class Overlay { SETTINGS, TUTORIAL, STUDENT, ROSTER, NEW_SECTION, SECTION, REGISTER }
 
 /** The raw and byte-reversed readings, shown side by side while calibrating. */
 data class RecentTap(val asRead: String, val reversed: String)
@@ -140,7 +118,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
         kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO,
     )
 
-    var screen by mutableStateOf(Screen.SECTIONS)
+    var screen by mutableStateOf(Screen.SCAN)
 
     /** Non-null while Settings or the tutorial is open over the tabs. */
     var overlay by mutableStateOf<Overlay?>(null)
@@ -231,17 +209,9 @@ class AppState(application: Application) : AndroidViewModel(application) {
     var attentionSeen by mutableIntStateOf(0)
         private set
 
-    /** Why the last QR scan was refused, if it was: cleared by the next good read. */
-    var qrNotice by mutableStateOf<String?>(null)
-
-    /** The reader the Scan tab is on, remembered between launches. */
-    var scanMode by mutableStateOf(ReaderMode.NFC)
-
     /** Which chart the Session report draws. One lens at a time. */
     var chartKind by mutableStateOf(ChartKind.PIE)
 
-    /** A scanned code waiting for a confirmed name. Never persisted. */
-    var qrPending by mutableStateOf<QrPending?>(null)
     val recentTaps = mutableStateListOf<RecentTap>()
     var reportPath by mutableStateOf<String?>(null)
     var reportError by mutableStateOf<String?>(null)
@@ -315,7 +285,6 @@ class AppState(application: Application) : AndroidViewModel(application) {
         lateAfterMinutes = store.lateAfterMinutes()
         hapticStrength = HapticStrength.fromStored(store.hapticStrength())
         scanSound = store.isScanSoundOn()
-        scanMode = if (store.readerMode().equals("qr", ignoreCase = true)) ReaderMode.QR else ReaderMode.NFC
         chartKind = when (store.chartKind().lowercase()) {
             "line" -> ChartKind.LINE
             "bar" -> ChartKind.BAR
@@ -442,10 +411,10 @@ class AppState(application: Application) : AndroidViewModel(application) {
         useSubject(subject)
     }
 
-    fun renameStudent(uid: String, newName: String) =
-        applyEdit(Sections.renameStudent(sections, selectedName, uid, newName))
+    fun renameStudent(index: Int, newName: String) =
+        applyEdit(Sections.renameStudentAt(sections, selectedName, index, newName))
 
-    fun removeStudent(uid: String) = applyEdit(Sections.removeStudent(sections, selectedName, uid))
+    fun removeStudent(index: Int) = applyEdit(Sections.removeStudentAt(sections, selectedName, index))
 
     private fun applyEdit(edit: Sections.Edit) {
         if (sectionsBroken != null) {
@@ -504,8 +473,8 @@ class AppState(application: Application) : AndroidViewModel(application) {
         overlay = target
     }
 
-    /** Which student the full-screen editor is showing while Overlay.STUDENT is open. */
-    var editingStudentUid by mutableStateOf<String?>(null)
+    /** Which roster row the full-screen editor is showing while Overlay.STUDENT is open. */
+    var editingStudentIndex by mutableStateOf(-1)
 
     /** Naming a class (and importing one) happens on its own page, off the shelf. */
     fun openNewSection() {
@@ -535,15 +504,15 @@ class AppState(application: Application) : AndroidViewModel(application) {
     }
 
     /** A roster row opens this: everything you can do to one student, on its own page. */
-    fun openStudent(uid: String) {
-        editingStudentUid = uid
+    fun openStudent(index: Int) {
+        editingStudentIndex = index
         overlay = Overlay.STUDENT
         sectionsError = ""
     }
 
     fun closeOverlay() {
         overlay = null
-        editingStudentUid = null
+        editingStudentIndex = -1
         setHeaderAction(null, null)
     }
 
@@ -974,20 +943,38 @@ class AppState(application: Application) : AndroidViewModel(application) {
      * re-armed afterwards, because the teacher is at a door tapping cards one
      * after another.
      */
-    fun bindCard(studentName: String) {
+    fun bindCard(index: Int) {
         val pending = registerState.pendingUid ?: return
-        val edit = Sections.bindCard(sections, selectedName, studentName, pending)
+        val learner = selectedSection?.students?.getOrNull(index) ?: return
+        val edit = Sections.bindCardAt(sections, selectedName, index, pending)
         if (edit.error.isNotEmpty()) {
             registerState = registerState.copy(message = edit.error)
             return
         }
         sections = edit.sections
         store.saveSections(sections)
+        // A card bound while the session is running has to be scannable in that same
+        // session, and the session's roster is a snapshot: fill the UID in on it too.
+        val live = session
+        if (live != null && live.sectionName.equals(selectedName, ignoreCase = true)) {
+            // By position, not by name: two learners can share a name, and filling
+            // in the first namesake would arm the wrong child's card.
+            session = live.copy(
+                roster = live.roster.mapIndexed { row, student ->
+                    if (row == index && student.name == learner.name) {
+                        student.copy(uid = Uid.normalize(pending))
+                    } else {
+                        student
+                    }
+                },
+            )
+            persistSession()
+        }
         sectionsMessage = edit.message
         registerState = RegisterFlow.arm(
             registerState.copy(
                 savedCount = registerState.savedCount + 1,
-                lastSaved = studentName.trim() + "  " + pending,
+                lastSaved = learner.name.trim() + "  " + pending,
             ),
             selectedSection,
         ).copy(message = edit.message)
@@ -1063,7 +1050,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
 
     /**
      * An NFC card. The bytes become an identifier and go straight to the one
-     * attendance processor - the same one a QR scan uses.
+     * attendance processor - the same one a hand correction uses.
      */
     fun onNfcTap(bytes: ByteArray) {
         val asRead = Uid.canonical(bytes)
@@ -1073,106 +1060,15 @@ class AppState(application: Application) : AndroidViewModel(application) {
         submitAttendance(if (uidReversed) flipped else asRead, AttendanceMethod.NFC)
     }
 
-    /**
-     * A scanned QR code. The payload carries the SAME identifier an NFC card does,
-     * so it enters the same processor and obeys the same rules - no second set of
-     * attendance rules exists for QR.
-     */
-    fun onQrScan(payload: String, atMillis: Long = System.currentTimeMillis()) {
-        if (session == null || !running) {
-            qrNotice = "No session running - that scan was not recorded."
-            statusText = qrNotice ?: ""
-            return
-        }
-        if (paused) {
-            qrNotice = "Paused - that scan was not recorded. Press Resume when the class is ready."
-            statusText = qrNotice ?: ""
-            return
-        }
-
-        val rosterNow = session?.roster ?: emptyList()
-        when (val reading = QrCode.read(payload, rosterNow)) {
-            QrCode.Reading.Empty -> {
-                qrNotice = "Nothing was in that QR code."
-                statusText = qrNotice ?: ""
-            }
-            // A code this app printed carries the card UID, so nobody has to be asked.
-            is QrCode.Reading.ByUid -> submitAttendance(reading.uid, AttendanceMethod.QR, atMillis)
-            // The code carried a name: confirm it, then verify the UID it belongs to.
-            is QrCode.Reading.Named -> openQrConfirm(reading.candidates, suggested = true)
-            QrCode.Reading.NeedsChoice -> openQrConfirm(rosterNow, suggested = false)
-        }
-    }
-
-    /**
-     * The confirmation step, which is the whole point of the QR fallback: the code on
-     * a school ID does not identify a student, so a person does. The names are shown;
-     * the teacher confirms which one, and the card UID is put in front of them to
-     * verify before anything is recorded.
-     */
-    private fun openQrConfirm(candidates: List<Student>, suggested: Boolean) {
-        if (candidates.isEmpty()) {
-            qrNotice = "Nobody is registered in this section yet."
-            statusText = qrNotice ?: ""
-            return
-        }
-        qrNotice = null
-        qrPending = QrPending(
-            candidates = candidates,
-            chosen = if (suggested && candidates.size == 1) candidates.first() else null,
-            suggested = suggested && candidates.size == 1,
-        )
-        overlay = Overlay.QR_CONFIRM
-    }
-
-    fun qrChoose(student: Student) {
-        qrPending = qrPending?.copy(chosen = student, suggested = false)
-    }
-
-    fun qrBackToNames() {
-        qrPending = qrPending?.copy(chosen = null)
-    }
-
-    fun cancelQr() {
-        qrPending = null
-        closeOverlay()
-    }
-
-    /** The teacher confirmed the name and verified the UID: record it, as a QR read. */
-    fun confirmQrAttendance() {
-        val chosen = qrPending?.chosen ?: return
-        val now = System.currentTimeMillis()
-        val current = session
-        val result = AttendanceProcessor.processForStudent(
-            student = chosen,
-            method = AttendanceMethod.QR,
-            session = current,
-            running = running,
-            paused = paused,
-            atMillis = now,
-            windowMillis = current?.let { sessionWindowMillis(it) } ?: lateAfterMillis(),
-        )
-        applyResult(result, now, AttendanceMethod.QR, current)
-        qrPending = null
-        closeOverlay()
-    }
-
     fun useChartKind(kind: ChartKind) {
         chartKind = kind
         store.setChartKind(kind.name.lowercase())
     }
 
-    fun useReaderMode(mode: ReaderMode) {
-        scanMode = mode
-        store.setReaderMode(mode.name.lowercase())
-        qrNotice = null
-        qrPending = null
-    }
-
     /**
      * The single gate every identifier passes through, whoever read it. Registered,
      * unknown, duplicate, session running, paused, on time or late, and which reader
-     * recorded it - all decided here, once, for both readers.
+     * recorded it - all decided here, once, for every source.
      */
     private fun submitAttendance(
         identifier: String,
@@ -1211,7 +1107,6 @@ class AppState(application: Application) : AndroidViewModel(application) {
         if (result.records && current != null) {
             session = current.copy(taps = current.taps + result.tap())
             lastRead = LastRead(result.student?.name, result.identifier, atMillis, method)
-            qrNotice = null
             persistSession()
         } else if (result.outcome == Outcome.DUPLICATE) {
             // Not appended, but the teacher has to see why nothing changed.
@@ -1232,8 +1127,35 @@ class AppState(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * The session the report shows: today's when one is open, otherwise this
+     * class's most recent one on disk. The day a teacher scanned is still the day
+     * she reads a report about after the app was closed, so the Report tab must
+     * not fall back to "No session yet" just because the session was stopped.
+     */
+    val reportSession: AttendanceSession?
+        get() {
+            // The open session only if it belongs to the class on screen; a session
+            // of another class must never stand in for this class's report.
+            val open = session
+            if (open != null && open.sectionName.equals(selectedName, ignoreCase = true)) return open
+            return allSessions(selectedName).firstOrNull()
+        }
+
+    /** Attendance of the session that is OPEN right now - never a stored one. */
     fun resolved(): ResolvedAttendance? {
         val current = session ?: return null
+        return AttendanceResolver.resolve(
+            roster = current.roster,
+            taps = current.taps,
+            startedAtMillis = current.startedAtMillis,
+            lateAfterMillis = sessionWindowMillis(current),
+        )
+    }
+
+    /** Attendance of the session the Report shows: the open one, else the latest stored. */
+    fun reportResolved(): ResolvedAttendance? {
+        val current = reportSession ?: return null
         return AttendanceResolver.resolve(
             roster = current.roster,
             taps = current.taps,
@@ -1295,10 +1217,46 @@ class AppState(application: Application) : AndroidViewModel(application) {
 
     /**
      * Record a student by hand - the one whose card is broken, lost or never made.
-     * The tap is tagged MANUAL, so the report never claims a card was scanned.
+     * The tap is tagged MANUAL, so the report never claims a card was scanned. A
+     * learner with no card yet is matched with [ManualKey], derived from the
+     * session's own roster snapshot, so the correction lands on that learner and
+     * survives a relaunch. A session that already ended can still be corrected:
+     * the tap is appended and the same row is written back with live = false.
      */
-    fun markPresent(uid: String) {
-        submitAttendance(uid, AttendanceMethod.MANUAL)
+    fun markPresent(student: Student) {
+        val current = reportSession
+        if (current == null) {
+            statusText = "No session to correct - start one on the Scan tab."
+            return
+        }
+        val roster = current.roster
+        // The row the teacher tapped, by identity when it is the same object (it is:
+        // the absent list is built from this roster), so two namesakes with blank
+        // UIDs cannot collapse onto the first one.
+        val index = roster.indexOfFirst { it === student }.let { found ->
+            if (found >= 0) found else roster.indexOfFirst {
+                it.name == student.name && Uid.normalize(it.uid) == Uid.normalize(student.uid)
+            }
+        }
+        if (index < 0) {
+            statusText = "That learner is no longer on this roster."
+            return
+        }
+        val uid = Uid.normalize(student.uid)
+        val identifier = uid.ifEmpty { ManualKey.of(index, roster) }
+        val live = session?.sessionId == current.sessionId
+        val now = System.currentTimeMillis()
+        val result = AttendanceProcessor.processForStudent(
+            student = student,
+            method = AttendanceMethod.MANUAL,
+            session = current,
+            running = live && running,
+            paused = live && paused,
+            atMillis = now,
+            windowMillis = sessionWindowMillis(current),
+            identifier = identifier,
+        )
+        applyResult(result, now, AttendanceMethod.MANUAL, current)
     }
 
     // -------------------------------------------------------------------- shared

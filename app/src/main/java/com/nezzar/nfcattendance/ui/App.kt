@@ -87,9 +87,9 @@ import kotlinx.coroutines.launch
 /** Bottom-bar destinations, in the same order as [Screen]. */
 /** The three tabs. Registering is a page under the shelf, not a fourth one. */
 private enum class Destination(val label: String, val icon: Int) {
-    SECTIONS("Sections", R.drawable.ic_nav_sections),
     SCAN("Scan", R.drawable.ic_nav_scan),
     REPORT("Report", R.drawable.ic_nav_report),
+    SECTIONS("Sections", R.drawable.ic_nav_sections),
 }
 
 @Composable
@@ -123,13 +123,10 @@ fun AppRoot(state: AppState, activity: Activity) {
     }
     // Armed for the two pages that take taps: the Scan tab, and the register page
     // (which lives under the shelf now, over the tabs).
-    // The card reader is armed for registration always, and for the Scan tab only while
-    // NFC is the chosen reader - in QR mode the camera is the reader, not the antenna.
-    //
     // The reader is off while the session is paused, not merely ignored: the antenna
     // must not keep reading cards into an outcome called PAUSED that then vanishes.
     val tapping = state.overlay == Overlay.REGISTER ||
-        (state.screen == Screen.SCAN && state.scanMode == ReaderMode.NFC && !state.paused)
+        (state.screen == Screen.SCAN && !state.paused)
     // The display stays on whenever a page is armed - even with the radio off: the
     // teacher may be walking to the quick-settings tile with the page open, and it
     // must not lock on the way there. Split from arming because arming now depends
@@ -312,14 +309,13 @@ fun AppRoot(state: AppState, activity: Activity) {
                         Overlay.TUTORIAL -> TutorialScreen(state, pageModifier)
                         Overlay.STUDENT -> StudentScreen(
                             state = state,
-                            uid = state.editingStudentUid ?: "",
+                            index = state.editingStudentIndex,
                             modifier = pageModifier,
                         )
                         Overlay.ROSTER -> RosterScreen(state, pageModifier)
                         Overlay.NEW_SECTION -> NewSectionScreen(state, pageModifier)
                         Overlay.SECTION -> SectionScreen(state, pageModifier)
                         Overlay.REGISTER -> RegisterScreen(state, activity, pageModifier)
-                        Overlay.QR_CONFIRM -> QrConfirmScreen(state, pageModifier)
                     }
                 }
             }
@@ -344,7 +340,6 @@ private fun ShellHeader(state: AppState, onSettings: () -> Unit, onGuide: () -> 
         Overlay.NEW_SECTION -> "New class"
         Overlay.SECTION -> "Edit class"
         Overlay.REGISTER -> "Register"
-        Overlay.QR_CONFIRM -> "Confirm student"
         null -> Destination.entries[state.screen.ordinal].label
     }
     Column {

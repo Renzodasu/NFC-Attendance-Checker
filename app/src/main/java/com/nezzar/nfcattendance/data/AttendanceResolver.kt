@@ -53,13 +53,21 @@ object AttendanceResolver {
             if (!firstTapByUid.containsKey(uid)) firstTapByUid[uid] = tap.copy(uid = uid)
         }
 
-        val rosterUids = roster.map { Uid.normalize(it.uid) }.toSet()
+        // Identity per roster row: the card when there is one, otherwise a key
+        // derived from the name and position, because a form-imported class has no
+        // UIDs yet. That is what lets a hand-recorded presence for a card-less
+        // learner resolve to that learner alone instead of to every blank-UID row.
+        val keys = roster.indices.map { index ->
+            Uid.normalize(roster[index].uid).ifEmpty { ManualKey.of(index, roster) }
+        }
+        val rosterKeys = keys.toSet()
 
         val present = mutableListOf<PresentStudent>()
         val late = mutableListOf<PresentStudent>()
         val absent = mutableListOf<Student>()
-        for (student in roster) {
-            val tap = firstTapByUid[Uid.normalize(student.uid)]
+        for (index in roster.indices) {
+            val student = roster[index]
+            val tap = firstTapByUid[keys[index]]
             when {
                 tap == null -> absent += student
                 statusOf(startedAtMillis, tap.atMillis, lateAfterMillis) == AttendanceStatus.LATE ->
@@ -69,7 +77,7 @@ object AttendanceResolver {
         }
 
         val unmatched = firstTapByUid
-            .filterKeys { !rosterUids.contains(it) }
+            .filterKeys { !rosterKeys.contains(it) }
             .values
             .toList()
 

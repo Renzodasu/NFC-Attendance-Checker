@@ -21,11 +21,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -72,6 +75,7 @@ fun RegisterScreen(state: AppState, activity: Activity, modifier: Modifier = Mod
     val register = state.registerState
     val section = state.selectedSection
     var nameDraft by remember { mutableStateOf("") }
+    var learnerQuery by remember { mutableStateOf("") }
     val focus = remember { FocusRequester() }
     val listState = rememberLazyListState()
 
@@ -243,29 +247,57 @@ fun RegisterScreen(state: AppState, activity: Activity, modifier: Modifier = Mod
                                 SectionLabel("This card belongs to")
                                 Spacer(Modifier.height(4.dp))
                                 Note("Learners from a school form have no card yet. Choose one, or type a new name below.")
-                                for (student in waiting.take(12)) {
-                                    TextButton(
-                                        onClick = {
-                                            state.bindCard(student.name)
-                                            nameDraft = ""
-                                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        },
+                                // A form can bring thirty names. The first twelve were a
+                                // wall: the list now scrolls and a field narrows it, so
+                                // every waiting learner is reachable without typing a name.
+                                if (waiting.size > 6) {
+                                    OutlinedTextField(
+                                        value = learnerQuery,
+                                        onValueChange = { learnerQuery = it },
+                                        label = { Text("Find a learner") },
+                                        singleLine = true,
                                         modifier = Modifier.fillMaxWidth(),
-                                    ) {
-                                        Text(
-                                            text = student.name,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Spacer(Modifier.height(6.dp))
+                                }
+                                val roster = section?.students.orEmpty()
+                                val rows = roster.indices.filter { index ->
+                                    val learner = roster[index]
+                                    learner.uid.isBlank() &&
+                                        (learnerQuery.isBlank() ||
+                                            learner.name.contains(learnerQuery.trim(), ignoreCase = true))
+                                }
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 260.dp)
+                                        .verticalScroll(rememberScrollState()),
+                                ) {
+                                    for (row in rows) {
+                                        TextButton(
+                                            onClick = {
+                                                state.bindCard(row)
+                                                learnerQuery = ""
+                                                nameDraft = ""
+                                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            },
                                             modifier = Modifier.fillMaxWidth(),
+                                        ) {
+                                            Text(
+                                                text = roster[row].name,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.fillMaxWidth(),
+                                            )
+                                        }
+                                    }
+                                    if (rows.isEmpty()) {
+                                        Text(
+                                            text = "No waiting learner matches that - type a new name below.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     }
-                                }
-                                if (waiting.size > 12) {
-                                    Text(
-                                        text = "and " + (waiting.size - 12) + " more waiting",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
                                 }
                             }
                             Spacer(Modifier.height(12.dp))
@@ -322,8 +354,8 @@ fun RegisterScreen(state: AppState, activity: Activity, modifier: Modifier = Mod
                         EmptyState(
                             icon = R.drawable.ic_nav_register,
                             title = "No NFC reader on this phone",
-                            body = "Registration taps need the antenna. Import a roster instead, or " +
-                                "take attendance with the QR reader on the Scan page.",
+                            body = "Registration taps need the antenna. You can still import a roster " +
+                                "and mark presence by hand on the Report page.",
                         )
                     }
                 }

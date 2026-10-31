@@ -113,6 +113,6 @@ class NfcPromptTest {
             assertTrue("$off must not promise taps: $line", !line.contains("Tap student IDs"))
         }
         assertTrue(startStatusText(id, section, NfcState.DISABLED).contains("NFC is off"))
-        assertTrue(startStatusText(id, section, NfcState.UNSUPPORTED).contains("QR"))
+        assertTrue(startStatusText(id, section, NfcState.UNSUPPORTED).contains("by hand"))
     }
 }

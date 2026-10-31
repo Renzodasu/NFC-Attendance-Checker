@@ -268,4 +268,88 @@ object Sections {
         }
         return Edit(updated, message = "Removed " + canonical + " from " + target.name + ".")
     }
+
+    /**
+     * Rename by position, not by card. A class read out of the school form has no
+     * UIDs at all, and an empty UID must never be read as "the first unbound
+     * learner" - that is how a correction lands on the wrong child.
+     */
+    fun renameStudentAt(
+        sections: List<Section>,
+        sectionName: String,
+        index: Int,
+        rawName: String,
+        now: Long = System.currentTimeMillis(),
+    ): Edit {
+        val target = find(sections, sectionName) ?: return Edit(sections, error = "Select a section first.")
+        if (index !in target.students.indices) {
+            return Edit(sections, error = "That learner is no longer on the roster.")
+        }
+        val name = rawName.trim()
+        if (name.isEmpty()) return Edit(sections, error = "A student name cannot be blank.")
+        val learner = target.students[index]
+        if (learner.name == name) return Edit(sections, message = "Student name unchanged.")
+        val students = target.students.toMutableList()
+        students[index] = learner.copy(name = name)
+        val updated = sections.map {
+            if (it.name == target.name) target.copy(students = students, updatedAt = now) else it
+        }
+        return Edit(updated, message = "Renamed " + learner.name + " to " + name + ".")
+    }
+
+    /** Remove by position, for the same reason [renameStudentAt] exists. */
+    fun removeStudentAt(
+        sections: List<Section>,
+        sectionName: String,
+        index: Int,
+        now: Long = System.currentTimeMillis(),
+    ): Edit {
+        val target = find(sections, sectionName) ?: return Edit(sections, error = "Select a section first.")
+        if (index !in target.students.indices) {
+            return Edit(sections, error = "That learner is no longer on the roster.")
+        }
+        val learner = target.students[index]
+        val students = target.students.toMutableList().also { it.removeAt(index) }
+        val updated = sections.map {
+            if (it.name == target.name) target.copy(students = students, updatedAt = now) else it
+        }
+        return Edit(updated, message = "Removed " + learner.name + " from " + target.name + ".")
+    }
+
+    /**
+     * Bind a card to one row of the roster, chosen by position. [bindCard] matches
+     * by name, which cannot tell two namesakes apart; this is what the Register
+     * picker calls, so the row the teacher pointed at is the row that changes.
+     */
+    fun bindCardAt(
+        sections: List<Section>,
+        sectionName: String,
+        index: Int,
+        uid: String,
+        now: Long = System.currentTimeMillis(),
+    ): Edit {
+        val target = find(sections, sectionName) ?: return Edit(sections, error = "Select a section first.")
+        if (index !in target.students.indices) {
+            return Edit(sections, error = "That learner is no longer on the roster.")
+        }
+        val canonical = Uid.normalize(uid)
+        if (!Uid.isValid(canonical)) {
+            return Edit(sections, error = "That card did not read as a whole UID.")
+        }
+        for (section in sections) {
+            val holder = section.students.firstOrNull { Uid.normalize(it.uid) == canonical } ?: continue
+            return Edit(
+                sections,
+                error = "That card is already registered to " + holder.name + " in " + section.name + ".",
+            )
+        }
+        val learner = target.students[index]
+        if (learner.name.isBlank()) return Edit(sections, error = "That learner has no name.")
+        val students = target.students.toMutableList()
+        students[index] = learner.copy(uid = canonical)
+        val updated = sections.map {
+            if (it.name == target.name) target.copy(students = students, updatedAt = now) else it
+        }
+        return Edit(updated, message = "Bound " + canonical + " to " + learner.name + ".")
+    }
 }

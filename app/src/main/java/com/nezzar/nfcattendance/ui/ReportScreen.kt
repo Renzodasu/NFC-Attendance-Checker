@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -33,8 +34,10 @@ import com.nezzar.nfcattendance.data.Sf2Report
 
 @Composable
 fun ReportScreen(state: AppState) {
-    val resolved = state.resolved()
-    val session = state.session
+    val resolved = state.reportResolved()
+    // Today's session when one is open, otherwise this class's latest on disk: the
+    // report a teacher reads after a relaunch is still about the day she scanned.
+    val session = state.reportSession
     val listState = rememberLazyListState()
 
     LazyColumn(
@@ -87,20 +90,20 @@ fun ReportScreen(state: AppState) {
                     Note("Everyone on the roster was present.")
                 }
             }
-            items(resolved.absent, key = { it.uid }) { student ->
+            itemsIndexed(resolved.absent, key = { index, student -> "absent-" + index + "-" + student.name }) { _, student ->
                 BrandCard(modifier = Modifier.animateItem()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(student.name, style = MaterialTheme.typography.bodyLarge)
                             Text(
-                                text = student.uid,
+                                text = if (student.uid.isBlank()) "No card yet" else student.uid,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         // A broken, lost or never-made card must not be able to turn a
                         // present student into an absent one. The sheet records which.
-                        TextButton(onClick = { state.markPresent(student.uid) }) {
+                        TextButton(onClick = { state.markPresent(student) }) {
                             Text("Mark present")
                         }
                     }
@@ -185,13 +188,13 @@ fun ReportScreen(state: AppState) {
                 item(key = "late-label") {
                     SectionLabel("Late: " + resolved.late.size)
                 }
-                items(resolved.late, key = { "late-" + it.student.uid }) { item ->
+                itemsIndexed(resolved.late, key = { index, item -> "late-" + index + "-" + item.student.name }) { _, item ->
                     BrandCard(modifier = Modifier.animateItem()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(item.student.name, style = MaterialTheme.typography.bodyLarge)
                                 Text(
-                                    text = item.student.uid,
+                                    text = if (item.student.uid.isBlank()) "No card yet" else item.student.uid,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -218,13 +221,13 @@ fun ReportScreen(state: AppState) {
                 item(key = "present-label") {
                     SectionLabel("Present: " + resolved.present.size)
                 }
-                items(resolved.present, key = { it.student.uid }) { item ->
+                itemsIndexed(resolved.present, key = { index, item -> "present-" + index + "-" + item.student.name }) { _, item ->
                     BrandCard(modifier = Modifier.animateItem()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(item.student.name, style = MaterialTheme.typography.bodyLarge)
                                 Text(
-                                    text = item.student.uid,
+                                    text = if (item.student.uid.isBlank()) "No card yet" else item.student.uid,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )

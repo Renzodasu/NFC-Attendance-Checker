@@ -22,9 +22,17 @@ object Uid {
     /** Same UID with the byte order reversed - the form NFC Tools usually prints. */
     fun reversed(bytes: ByteArray): String = canonical(bytes.reversedArray())
 
-    /** Normalises a UID: strips separators, uppercases. */
-    fun normalize(raw: String): String =
-        raw.trim().replace(":", "").replace("-", "").replace(" ", "").uppercase()
+    /**
+     * Normalises a UID: strips separators, uppercases. A manual key (a name
+     * standing in for a card on a form-imported class) is already canonical, so
+     * it is returned unchanged - stripping its colon or space would make it stop
+     * matching the key the resolver derives from the roster.
+     */
+    fun normalize(raw: String): String {
+        val trimmed = raw.trim()
+        if (ManualKey.isManual(trimmed)) return trimmed
+        return trimmed.replace(":", "").replace("-", "").replace(" ", "").uppercase()
+    }
 
     /** A MIFARE Classic 1K UID is 4 bytes = 8 hex characters (longer UIDs are allowed). */
     fun isValid(candidate: String): Boolean {

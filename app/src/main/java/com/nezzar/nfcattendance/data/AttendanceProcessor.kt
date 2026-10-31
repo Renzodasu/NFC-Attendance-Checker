@@ -53,11 +53,10 @@ data class ProcessedAttendance(
 }
 
 /**
- * THE attendance decision, and the only one. Every reader ends up here:
+ * THE attendance decision, and the only one. Every path ends up here:
  *
- *   NFC UID   -> [process]            -> the same rules
- *   QR by UID -> [process]            -> the same rules
- *   QR by hand-> [processForStudent]  -> the same rules
+ *   NFC UID -> [process]            -> the same rules
+ *   by hand -> [processForStudent]  -> the same rules
  *
  * Registered, unknown, duplicate, session running, paused, on time or late and the
  * recording method are decided here once, for every path. Pure: no Android, no
@@ -99,11 +98,12 @@ object AttendanceProcessor {
     }
 
     /**
-     * A presence the teacher resolved by hand, because the code on the ID could not
-     * identify the student by itself (it carries a student number, which this app
-     * does not read). The name was confirmed on screen and the card UID verified;
-     * from here the rules are the ones a card tap obeys, and the method is recorded
-     * as QR so the report can tell the difference.
+     * A presence the teacher recorded by hand, because there is no card to read -
+     * a roster imported from a school form has names before it has UIDs. The student
+     * was picked on the report, so no identifier check is needed; from here the rules
+     * are the ones a card tap obeys, and the method is recorded as MANUAL so the
+     * report can tell the difference. [identifier] lets a learner with no card match
+     * on a stable name key instead of an empty UID.
      */
     fun processForStudent(
         student: Student,
@@ -113,8 +113,9 @@ object AttendanceProcessor {
         paused: Boolean,
         atMillis: Long,
         windowMillis: Long = AttendanceResolver.LATE_AFTER_MILLIS,
+        identifier: String = Uid.normalize(student.uid),
     ): ProcessedAttendance {
-        val id = Uid.normalize(student.uid)
+        val id = identifier
         val stopped = refusalFor(session, running, paused, id, method, atMillis)
         if (stopped != null) return stopped
         return decide(id, student, method, session!!, atMillis, windowMillis)
@@ -208,7 +209,10 @@ object AttendanceProcessor {
             atMillis = atMillis,
             student = student,
             status = status,
-            message = if (status == AttendanceStatus.LATE) {
+            message = if (method == AttendanceMethod.MANUAL) {
+                (if (status == AttendanceStatus.LATE) "Late: " else "Present: ") + student.name +
+                    " at " + ReportBuilder.timeText(atMillis) + " - by hand."
+            } else if (status == AttendanceStatus.LATE) {
                 "Late: " + student.name + " (" + id + ") at " + ReportBuilder.timeText(atMillis) +
                     " - " + method.label + "."
             } else {

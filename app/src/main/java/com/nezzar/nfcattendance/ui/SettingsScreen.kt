@@ -148,7 +148,7 @@ fun SettingsScreen(state: AppState, modifier: Modifier = Modifier) {
                 Note(
                     "Pie shows the attendance itself: on time, late and absent. Line shows " +
                         "when the room filled, with the late mark. Bar shows how each presence " +
-                        "was recorded: NFC, QR or by hand."
+                        "was recorded: NFC or by hand (QR only in sessions from before 0.0.9)."
                 )
                 Spacer(Modifier.height(8.dp))
                 Note("This changes the chart on the report only. The numbers and the exported sheet are the same either way.")
@@ -223,8 +223,7 @@ fun SettingsScreen(state: AppState, modifier: Modifier = Modifier) {
                 KeyValueRow("Sections", state.sections.size.toString())
                 KeyValueRow("Registered students", cards.toString())
                 KeyValueRow("Exports", "Documents/Presencia")
-                KeyValueRow("Reads", "NFC cards and QR codes")
-                KeyValueRow("Camera", "used only to decode a code, in memory")
+                KeyValueRow("Reads", "NFC cards")
                 KeyValueRow("Works without", "Internet, account, login")
                 Spacer(Modifier.height(8.dp))
                 Points(

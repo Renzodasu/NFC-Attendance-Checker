@@ -4,6 +4,51 @@ All notable changes to NFC Attendance Checker. This project follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and uses date-based
 versions in the form `0.0.N`.
 
+## [0.0.9] - 2026-10-31
+
+### Added
+
+- **A form-imported class can be armed without typing.** Register's *This card
+  belongs to* panel now lists **every** learner still waiting for a card, with a
+  search box, and binds the tapped card to the exact row the teacher points at.
+  The old panel stopped at the first twelve names, so learners 13-30 could not be
+  bound at all without typing.
+- **A card bound mid-session works in that session.** The session's roster is a
+  snapshot taken at Start; binding a card now fills the UID into that snapshot
+  too, so the teacher does not have to end the session to arm a late arrival.
+- **The Report tab opens on the class's latest session.** After a stop or a
+  relaunch, the last session on disk is shown for the selected class, so the
+  absent list a teacher reads after closing the app is still today's.
+- **A learner with no card can be marked present by hand.** *Mark present* on an
+  absent row records a presence for that one learner - on a closed session as
+  well - and writes the correction back with `live = false`.
+
+### Changed
+
+- **The tabs are Scan, Report, Sections, and Scan is the start screen.** The order
+  matches the order of the school day rather than the order of setup.
+- **The QR fallback is gone.** The camera scanner, the reader switch, the
+  generated student QR code, the `CAMERA` permission and the camera/zxing
+  dependencies were removed, and the student page no longer draws a code.
+  `AttendanceMethod.QR` is kept as a value that only reads back, so sessions and
+  exports recorded before this release still parse and still say how they were
+  taken.
+
+### Fixed
+
+- **Opening a learner on a form-imported class no longer crashes.** Imported
+  learners all had a blank UID, and the roster and report lists used the UID as
+  their Compose key; two blank keys threw and killed the process. Lists are keyed
+  by row position now.
+- **Edits land on the child the teacher chose when two learners share a name.**
+  Rename, remove, bind and hand-mark all address the roster row, and a presence
+  recorded by hand for a card-less learner carries a key derived from the name and
+  position instead of an empty string.
+- **The student page no longer stutters.** The QR canvas drew hundreds of
+  rectangles inside a scrolling list; it went with the feature.
+- **A report never borrows another class's session.** The open session is only
+  used when it belongs to the class on screen.
+
 ## [0.0.8] - 2026-10-30
 
 ### Fixed
